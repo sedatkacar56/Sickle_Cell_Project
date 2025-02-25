@@ -1,0 +1,4023 @@
+---
+title: "Sickle_Cell_Project"
+author: "Sedat Kacar"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+```
+
+VPC1 = WT Male 
+VPC2  = Sickle Male
+VPC3 = WT Female 
+VPC4 = Sickle Female 
+
+```{r}
+
+```
+
+
+```{r}
+Vpc1 <- Read10X_h5(file = "C:/Users/skacar/OneDrive - Indiana University/PULMONARY POST DOC/SICKLE_PROJECT/1.Data_process/VPC1/WT_Male_filtered_feature_bc_matrix.h5")
+Vpc2 <- Read10X_h5(file = "C:/Users/skacar/OneDrive - Indiana University/PULMONARY POST DOC/SICKLE_PROJECT/1.Data_process/VPC2/Sickle_Male_filtered_feature_bc_matrix.h5")
+Vpc3 <- Read10X_h5(file = "C:/Users/skacar/OneDrive - Indiana University/PULMONARY POST DOC/SICKLE_PROJECT/1.Data_process/VPC3/WT_Female_filtered_feature_bc_matrix.h5")
+Vpc4 <- Read10X_h5(file = "C:/Users/skacar/OneDrive - Indiana University/PULMONARY POST DOC/SICKLE_PROJECT/1.Data_process/VPC4/Sickle_Female_filtered_feature_bc_matrix.h5")
+
+```
+
+
+```{r}
+Vpc1 <- CreateSeuratObject(Vpc1,
+                                    min.cells=3,
+                                    min.features = 100)
+
+Vpc2 <- CreateSeuratObject(Vpc2,
+                                    min.cells=3,
+                                    min.features = 100)
+
+Vpc3 <- CreateSeuratObject(Vpc3,
+                                    min.cells=3,
+                                    min.features = 100)
+Vpc4 <- CreateSeuratObject(Vpc4,
+                                    min.cells=3,
+                                    min.features = 100)
+
+
+rownames(Vpc1)[grep("^mt-", rownames(Vpc1))]
+```
+
+
+```{r}
+
+for (i in list("Vpc1", "Vpc2", "Vpc3", "Vpc4")){
+  obj <- get(i)
+  obj[["percent.mt"]] <- PercentageFeatureSet(obj, pattern = "^mt-")
+  assign(i, obj)
+}
+
+```
+
+
+
+```{r, fig.height=15, fig.width=10}
+library(ggplot2)
+
+for (i in list("Vpc1", "Vpc2", "Vpc3", "Vpc4")){
+obj <- get(i)
+# Plot features vs counts
+p1 <- FeatureScatter(obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + geom_hline(yintercept = 5000, linetype = "dashed", color = "red", size = 1.5) + geom_vline(xintercept = c(800, 17000), linetype = "dashed", color = "red", size = 1.5)  + theme(legend.position = "none") + ggtitle(i)
+# Display the combined plot
+p2 <- VlnPlot(obj, features = "percent.mt") + geom_hline(yintercept = 10, linetype = "dashed", color = "red", size = 1.5) + theme(legend.position = "none") + ggtitle(i)
+print(p1/p2)
+}
+
+```
+
+
+
+```{r}
+for (i in list("Vpc1", "Vpc2", "Vpc3", "Vpc4")){
+  obj <- get(i)
+obj <- subset(obj, subset = nFeature_RNA > 100 & nFeature_RNA < 5000 & nCount_RNA < 17000 & nCount_RNA > 800 & percent.mt < 10)
+assign(i, obj)
+}
+```
+
+
+```{r}
+for (i in list("Vpc1", "Vpc2", "Vpc3", "Vpc4")){
+    obj <- get(i)
+obj <- NormalizeData(obj)
+obj <- FindVariableFeatures(obj, selection.method = "vst", nfeatures = 2000)
+assign(i, obj)
+}
+```
+
+
+```{r}
+library(Seurat)
+
+```
+
+
+```{r}
+for (i in list("Vpc1", "Vpc2", "Vpc3", "Vpc4")){
+    obj <- get(i)
+obj$orig.ident <- i
+assign(i, obj)
+}
+```
+
+```{r}
+sickle_list <- list(WT_Male = Vpc1, Sickle_Male = Vpc2, WT_Female = Vpc3, Sickle_Female = Vpc4)
+```
+
+```{r}
+
+anchors <- FindIntegrationAnchors(object.list = sickle_list)
+
+```
+
+```{r}
+sickle_cell <- IntegrateData(anchorset = anchors)
+
+```
+#Vpc1
+```{r, fig.height=12, fig.width=10}
+
+for (i in list("Vpc1", "Vpc2", "Vpc3", "Vpc4")){
+    obj <- get(i)
+obj <- ScaleData(obj)
+obj <- RunPCA(obj, npcs = 50)
+obj <- RunUMAP(obj, dims = 1:50)
+obj <- FindNeighbors(obj, dims = 1:30)
+obj <- FindClusters(obj, resolution = 0.30)
+assign(i, obj)
+}
+
+
+sickle_list <- list(WT_Male = Vpc1, Sickle_Male = Vpc2, WT_Female = Vpc3, Sickle_Female = Vpc4)
+
+```
+
+#RNA
+
+```{r, fig.height=12, fig.width=10}
+
+DefaultAssay(sickle_cell) <- "RNA"
+sickle_cell <- ScaleData(sickle_cell, rownames(sickle_cell))
+
+sickle_cell <- RunPCA(sickle_cell, npcs = 50)
+sickle_cell <- RunUMAP(sickle_cell, dims = 1:50)
+sickle_cell <- FindNeighbors(sickle_cell, dims = 1:30)
+sickle_cell <- FindClusters(sickle_cell, resolution = 0.30)
+DimPlot(sickle_cell, label = T) + theme(legend.position = "bottom")
+DimPlot(sickle_cell, label = T, split.by = "orig.ident") + theme(legend.position = "bottom")
+
+library(gridExtra)
+library(ggplot2) 
+# Open a PNG device to save the output as a high-resolution image (300 dpi)
+png("Seurat_sickle_0.30_new.png", width = 9, height = 9, units = "in", res = 300)
+
+# Arrange and save all plots in a grid with 3 columns
+DimPlot(sickle_cell, label = T) + theme(legend.position = "bottom") + ggtitle("Sickle Cell Project")
+
+# Close the graphics device
+dev.off()
+
+```
+
+
+
+```{r, fig.height=12, fig.width=10}
+#Constructing the group name with ifelse
+sickle_cell$group <- ifelse(grepl("_1$", colnames(sickle_cell)), "WT Male",
+                               ifelse(grepl("_2$", colnames(sickle_cell)), "ScAnemia Male",
+                                      ifelse(grepl("_3$", colnames(sickle_cell)), "WT Female", "ScAnemia Female")))
+```
+
+#TRANSFER DATA WITH PARSE
+
+```{r, fig.height=10, fig.width=10}
+#BISMILLAHIRRAHMANIRRAHIM
+
+Parsall_comb$general_group_nounk
+Parsall_comb$general_group_w_na
+
+Vpc1 <- sickle_list[1]$Vpc1
+Vpc2 <- sickle_list[2]$Vpc2
+Vpc3 <- sickle_list[3]$Vpc3
+Vpc4 <- sickle_list[4]$Vpc4
+
+for (i in list("Vpc1", "Vpc2", "Vpc3", "Vpc4")){
+    obj <- get(i)
+    anchors <- FindTransferAnchors(
+      reference = Parsall_comb,         # Reference Seurat object (with known T cell labels)
+  query = obj,                 # Query Seurat object (to which we want to transfer labels)
+  normalization.method = "LogNormalize",       # Normalization method (use "SCT" if you did SCTransform or "SCT")
+  reference.assay = "RNA",            # Assay in the reference Seurat object (usually "RNA" for raw or normalized counts)
+  query.assay = "RNA",                # Assay in the query Seurat object
+  dims = 1:30)
+    #2- Second Tranfer labels
+    Bis_TRANSITIVE_Elh <- TransferData(anchorset = anchors,
+                             refdata = Parsall_comb$general_group_nounk,
+                             dims = 1:30
+                             )
+    obj$general_group_nounk <- Bis_TRANSITIVE_Elh$predicted.id
+    assign(i, obj)
+}
+
+sickle_cell$general_group_nounk <- NA
+
+
+for (i in 1:4){
+    colnames(sickle_list[[i]]) <- paste0(colnames(sickle_list[[i]]),"_", i)
+}
+
+
+
+for (i in 1:4){
+      obj <- sickle_list[[i]]
+      yes <- colnames(obj)
+      sickle_cell$general_group_nounk[yes] <- obj$general_group_nounk[yes]
+}
+
+   p <- DimPlot(sickle_cell, group.by = "general_group_nounk", label = T) + 
+      theme(legend.position = "bottom") + ggtitle(i)
+      LabelClusters(p, id = "general_group_nounk", fontface = "bold", size = 5)
+      print(p)
+
+
+
+
+#SEE GENERAL GROUP IN DATAFRAME-START
+#------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------------------------
+df1 <- as.data.frame(table(Vpc1$general_group_nounk))
+df2 <-  as.data.frame(table(Vpc2$general_group_nounk))
+df3 <- as.data.frame(table(Vpc3$general_group_nounk))
+df4 <- as.data.frame(table(Vpc4$general_group_nounk))
+
+rownames(df1) <- df1$Var1
+rownames(df2) <- df2$Var1
+rownames(df3) <- df3$Var1
+rownames(df4) <- df4$Var1
+
+df$Var1 <- NULL
+df1$Var1 <- NULL
+df2$Var1 <- NULL
+df3$Var1 <- NULL
+df4$Var1 <- NULL
+
+colnames(df1)[1] <- "WT Male"
+colnames(df2)[1] <- "ScAnemia Male"
+colnames(df3)[1] <- "WT Female"
+colnames(df4)[1] <- "ScAnemia Female"
+
+df <- cbind(df1, df2, df3, df4)
+
+
+library(ggplot2)
+library(tidyr)
+
+df$Cell_Type <- rownames(df)
+
+# Convert data frame to long format
+df_long <- pivot_longer(df, cols = c("WT Male", "ScAnemia Male", "WT Female", "ScAnemia Female"),
+                        names_to = "Condition", values_to = "Count")
+
+
+library(gridExtra)
+library(ggplot2) 
+# Open a PNG device to save the output as a high-resolution image (300 dpi)
+png("General_group_sickle_number.png", width = 5, height = 6, units = "in", res = 300) #7
+
+# Arrange and save all plots in a grid with 3 columns
+p
+
+# Close the graphics device
+dev.off()
+
+
+
+# Create grouped bar plot
+p <- ggplot(df_long, aes(x = Cell_Type, y = Count, fill = Condition)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = Count), 
+          position = position_stack(vjust = 0.5), # Position the text labels in the middle of each bar section
+          size = 3, color = "black") +
+  labs(x = "Cell Type", y = "Count", title = "Comparison of Counts by Condition for Each Cell Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+
+
+df_long$total <- NA
+df_long$total[df_long$Condition == "WT Male"] <- 7973
+df_long$total[df_long$Condition == "ScAnemia Male"] <- 7365
+df_long$total[df_long$Condition == "WT Female"] <- 8886
+df_long$total[df_long$Condition == "ScAnemia Female"] <- 7378
+
+
+df_long$count_percent <- NA
+df_long$count_percent <- (df_long$Count * 100) / df_long$total
+
+
+
+
+
+p <- ggplot(df_long, aes(x = Cell_Type, y = count_percent, fill = Condition)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = sprintf("%.1f", count_percent)), 
+          position = position_stack(vjust = 0.5), # Position the text labels in the middle of each bar section
+          size = 3, color = "black") +
+  labs(x = "Cell Type", y = "Count", title = "Percentage Comparison of Counts by Condition for Each Cell Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+png("General_group_sickle_percentage.png", width = 5, height = 6, units = "in", res = 300) #7
+
+# Arrange and save all plots in a grid with 3 columns
+p
+
+# Close the graphics device
+dev.off()
+
+
+
+
+#SEE GENERAL GROUP IN DATAFRAME-END
+#------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------------------------
+
+Parsall_comb$Annotation_transfer_EC
+Parsall_comb$Marker_Ann
+
+columns <- c("Annotation_transfer_EC", "Marker_Ann")
+
+for (i in columns){
+
+sickle_cell[[i]] <- NA
+}
+
+
+
+for (i in list("Vpc1", "Vpc2", "Vpc3", "Vpc4")){
+    obj <- get(i)
+    anchors <- FindTransferAnchors(
+      reference = Parsall_comb,         # Reference Seurat object (with known T cell labels)
+  query = obj,                 # Query Seurat object (to which we want to transfer labels)
+  normalization.method = "LogNormalize",       # Normalization method (use "SCT" if you did SCTransform or "SCT")
+  reference.assay = "RNA",            # Assay in the reference Seurat object (usually "RNA" for raw or normalized counts)
+  query.assay = "RNA",                # Assay in the query Seurat object
+  dims = 1:30)
+                #2- Second Tranfer labels
+    #first label
+    Bis_TRANSITIVE_Elh <- TransferData(anchorset = anchors,
+                             refdata = Parsall_comb$Annotation_transfer_EC,
+                             dims = 1:30
+                             )
+    obj$Annotation_transfer_EC<- Bis_TRANSITIVE_Elh$predicted.id
+    yes <- colnames(obj)
+    sickle_cell$Annotation_transfer_EC[yes] <- obj$Annotation_transfer_EC[yes]
+  
+    #Second label
+      Bis_TRANSITIVE_Elh <- TransferData(anchorset = anchors,
+                             refdata = Parsall_comb$Marker_Ann,
+                             dims = 1:30
+                             )
+    obj$Marker_Ann<- Bis_TRANSITIVE_Elh$predicted.id
+    yes <- colnames(obj)
+    sickle_cell$Marker_Ann[yes] <- obj$Marker_Ann[yes]
+    assign(i, obj) 
+}
+
+
+for (i in 1:4){
+
+sickle_list[[i]]$Annotation_transfer_EC <- NA
+sickle_list[[i]]$Marker_Ann <- NA
+}
+
+    colnames(Vpc1) <- paste0(colnames(Vpc1),"_", 1)
+    colnames(Vpc2) <- paste0(colnames(Vpc2),"_", 2)
+    colnames(Vpc3) <- paste0(colnames(Vpc3),"_", 3)
+    colnames(Vpc4) <- paste0(colnames(Vpc4),"_", 4)
+
+
+sickle_list[[1]]$Annotation_transfer_EC <- Vpc1$Annotation_transfer_EC
+sickle_list[[2]]$Annotation_transfer_EC<- Vpc2$Annotation_transfer_EC
+sickle_list[[3]]$Annotation_transfer_EC<- Vpc3$Annotation_transfer_EC
+sickle_list[[4]]$Annotation_transfer_EC<- Vpc4$Annotation_transfer_EC
+
+
+
+sickle_list[[1]]$Marker_Ann <- Vpc1$Marker_Ann
+sickle_list[[2]]$Marker_Ann<- Vpc2$Marker_Ann
+sickle_list[[3]]$Marker_Ann<- Vpc3$Marker_Ann
+sickle_list[[4]]$Marker_Ann<- Vpc4$Marker_Ann
+
+sickle_cell$general_group_nounk <- NA
+
+  yes <- colnames(Vpc1)
+
+
+for(i in list("Vpc1", "Vpc2", "Vpc3", "Vpc4")){
+  obj <- get(i)
+  yes <- colnames(obj)
+  sickle_cell$Annotation_transfer_EC[yes] <- obj$Annotation_transfer_EC[yes]
+         sickle_cell$Marker_Ann[yes]<- obj$Marker_Ann[yes] 
+
+}
+
+  
+```
+  
+  
+ # UMAP GENERAL 
+  
+```{r, fig.height=19, fig.width=14}
+
+pt_size <- 0.7
+
+p1 <- DimPlot(sickle_cell, group.by = "Annotation_transfer_EC", label = F, pt.size = pt_size) + 
+  theme(legend.position = "bottom") + ggtitle("Annotation_transfer_EC")
+p1 <- LabelClusters(p1, id = "Annotation_transfer_EC", fontface = "bold", 
+                    size = 5)
+
+
+p2 <- DimPlot(sickle_cell, group.by = "Marker_Ann", label = F, pt.size = pt_size) + 
+  theme(legend.position = "bottom") + ggtitle("Marker_Ann")
+p2 <- LabelClusters(p2, id = "Marker_Ann", fontface = "bold", 
+                    size = 5)
+
+
+p3 <- DimPlot(sickle_cell, group.by = "Parse_Ann2", label = F, pt.size = pt_size) + 
+  theme(legend.position = "bottom") + ggtitle("Parse_Ann2")
+p3 <- LabelClusters(p3, id = "Parse_Ann2", fontface = "bold", 
+                    size = 5)
+
+
+png("UMAP_Annotation_transfer_EC.png", width = 17, height = 19, units = "in", res = 300) #7
+print(p1)
+dev.off()
+
+png("UMAP_Marker_Ann.png", width = 17, height = 19, units = "in", res = 300) #7
+print(p2)
+dev.off()
+
+
+png("UMAP_Parser_Ann2.png", width = 17, height = 19, units = "in", res = 300) #7
+print(p3)
+dev.off()
+
+
+getwd()
+```
+
+
+
+```{r}
+# refdata = Nature_RNA_reference$annot
+#Stromal_parse_again$detailed_functional3
+# Parsall_comb$general_group_nounk,
+
+
+
+
+```
+
+
+
+
+```{r}
+#retrieved from 354 in thi .Rmd
+
+sickle_cell$Parse_Ann2 <- NA
+
+for (i in list("Vpc1", "Vpc2", "Vpc3", "Vpc4")){
+    obj <- get(i)
+    anchors <- FindTransferAnchors(
+      reference = RNA_ScAnemia,         # Reference Seurat object (with known T cell labels)
+  query = obj,                 # Query Seurat object (to which we want to transfer labels)
+  normalization.method = "LogNormalize",       # Normalization method (use "SCT" if you did SCTransform or "SCT")
+  reference.assay = "RNA",            # Assay in the reference Seurat object (usually "RNA" for raw or normalized counts)
+  query.assay = "RNA",                # Assay in the query Seurat object
+  dims = 1:30)
+                #2- Second Tranfer labels
+    #first label
+    Bis_TRANSITIVE_Elh <- TransferData(anchorset = anchors,
+                             refdata = RNA_ScAnemia$Parse_Ann2,
+                             dims = 1:30
+                             )
+    obj$Parse_Ann2<- Bis_TRANSITIVE_Elh$predicted.id
+    yes <- colnames(obj)
+    sickle_cell$Parse_Ann2[yes] <- obj$Parse_Ann2[yes]
+  
+    assign(i, obj) 
+}
+```
+
+
+#MARK ANN AGAIn
+
+
+```{r}
+for (i in list("Vpc1", "Vpc2", "Vpc3", "Vpc4")){
+    obj <- get(i)
+    anchors <- FindTransferAnchors(
+      reference = Parsall_comb,         # Reference Seurat object (with known T cell labels)
+  query = obj,                 # Query Seurat object (to which we want to transfer labels)
+  normalization.method = "LogNormalize",       # Normalization method (use "SCT" if you did SCTransform or "SCT")
+  reference.assay = "RNA",            # Assay in the reference Seurat object (usually "RNA" for raw or normalized counts)
+  query.assay = "RNA",                # Assay in the query Seurat object
+  dims = 1:30)
+                #2- Second Tranfer labels
+
+      Bis_TRANSITIVE_Elh <- TransferData(anchorset = anchors,
+                             refdata = Parsall_comb$Marker_Ann,
+                             dims = 1:30
+                             )
+    obj$Marker_Ann<- Bis_TRANSITIVE_Elh$predicted.id
+    yes <- colnames(obj)
+    sickle_cell$Marker_Ann[yes] <- obj$Marker_Ann[yes]
+    assign(i, obj) 
+}
+
+```
+
+# PARSE ANN2 of Vpcs
+
+```{r}
+
+#SEE GENERAL GROUP IN DATAFRAME-START
+#------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------------------------
+df1 <- as.data.frame(table(Vpc1$Parse_Ann2))
+df2 <-  as.data.frame(table(Vpc2$Parse_Ann2))
+df3 <- as.data.frame(table(Vpc3$Parse_Ann2))
+df4 <- as.data.frame(table(Vpc4$Parse_Ann2))
+
+rownames(df1) <- df1$Var1
+rownames(df2) <- df2$Var1
+rownames(df3) <- df3$Var1
+rownames(df4) <- df4$Var1
+
+#df$Var1 <- NULL
+df1$Var1 <- NULL
+df2$Var1 <- NULL
+df3$Var1 <- NULL
+df4$Var1 <- NULL
+
+colnames(df1)[1] <- "WT Male"
+colnames(df2)[1] <- "ScAnemia Male"
+colnames(df3)[1] <- "WT Female"
+colnames(df4)[1] <- "ScAnemia Female"
+
+
+#ADDING AND CHANING POSITION OF ROWNAMES
+df1 <- df1
+df1 <- rbind(df1, 'Inflammatory Monocytes' = 0)
+
+new_order <- c(rownames(df1)[1:10], "Inflammatory Monocytes", rownames(df1)[11:17])
+# Reorder the DataFrame rows
+df1 <- df1[new_order, , drop = FALSE]
+
+
+
+df <- cbind(df1, df2, df3, df4)
+
+
+library(ggplot2)
+library(tidyr)
+
+df$Cell_Type <- rownames(df)
+
+# Convert data frame to long format
+df_long <- pivot_longer(df, cols = c("WT Male", "ScAnemia Male", "WT Female", "ScAnemia Female"),
+                        names_to = "Condition", values_to = "Count")
+
+
+library(gridExtra)
+library(ggplot2) 
+
+
+# Create grouped bar plot
+p <- ggplot(df_long, aes(x = Cell_Type, y = Count, fill = Condition)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = Count), 
+          position = position_stack(vjust = 0.5), # Position the text labels in the middle of each bar section
+          size = 3, color = "black") +
+  labs(x = "Cell Type", y = "Count", title = "Comparison of Counts by Condition for Each Cell Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+# Open a PNG device to save the output as a high-resolution image (300 dpi)
+png("ParseAnn2_sickle_number.png", width = 9, height = 11, units = "in", res = 300) #7
+
+# Arrange and save all plots in a grid with 3 columns
+p
+
+# Close the graphics device
+dev.off()
+
+
+df_long$total <- NA
+df_long$total[df_long$Condition == "WT Male"] <- 7973
+df_long$total[df_long$Condition == "ScAnemia Male"] <- 7365
+df_long$total[df_long$Condition == "WT Female"] <- 8886
+df_long$total[df_long$Condition == "ScAnemia Female"] <- 7378
+
+
+df_long$count_percent <- NA
+df_long$count_percent <- (df_long$Count * 100) / df_long$total
+
+
+
+
+
+p <- ggplot(df_long, aes(x = Cell_Type, y = count_percent, fill = Condition)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = sprintf("%.1f", count_percent)), 
+          position = position_stack(vjust = 0.5), # Position the text labels in the middle of each bar section
+          size = 3, color = "black") +
+  labs(x = "Cell Type", y = "Count", title = "Percentage Comparison of Counts by Condition for Each Cell Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+png("Parse_Ann2_sickle_percentage.png", width = 9, height = 11, units = "in", res = 300) #7
+
+# Arrange and save all plots in a grid with 3 columns
+p
+
+# Close the graphics device
+dev.off()
+
+```
+
+
+#READ SICKLE CELL
+
+```{r}
+
+
+#Sickle Cell Anemia Project
+
+#"C:/Users/skacar/OneDrive - Indiana University/PULMONARY POST DOC/SICKLE_PROJECT/Sickle_Cell_Project_01_14_2025.Rmd"
+
+sickle_cell <- readRDS("C:/Users/skacar/OneDrive - Indiana University/PULMONARY POST DOC/SICKLE_PROJECT/sickle_cell_anemia_integrated_1_14_25.Rds")
+
+sickle_list <- readRDS("C:/Users/skacar/OneDrive - Indiana University/PULMONARY POST DOC/SICKLE_PROJECT/sickle_cell_list_anemia_integrated_1_14_25.Rds")
+
+saveRDS(sickle_cell, "C:/Users/skacar/OneDrive - Indiana University/PULMONARY POST DOC/SICKLE_PROJECT/sickle_cell_anemia_integrated_1_14_25.Rds")
+
+saveRDS(sickle_list, "C:/Users/skacar/OneDrive - Indiana University/PULMONARY POST DOC/SICKLE_PROJECT/sickle_cell_list_anemia_integrated_1_14_25.Rds")
+
+
+```
+
+
+
+
+
+# CONDITION of Vpcs
+
+```{r}
+
+
+#SEE GENERAL GROUP IN DATAFRAME-START
+#------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------------------------
+df1 <- as.data.frame(table(Vpc1$Parse_Ann2))
+df2 <-  as.data.frame(table(Vpc2$Parse_Ann2))
+df3 <- as.data.frame(table(Vpc3$Parse_Ann2))
+df4 <- as.data.frame(table(Vpc4$Parse_Ann2))
+
+rownames(df1) <- df1$Var1
+rownames(df2) <- df2$Var1
+rownames(df3) <- df3$Var1
+rownames(df4) <- df4$Var1
+
+#df$Var1 <- NULL
+df1$Var1 <- NULL
+df2$Var1 <- NULL
+df3$Var1 <- NULL
+df4$Var1 <- NULL
+
+colnames(df1)[1] <- "WT Male"
+colnames(df2)[1] <- "ScAnemia Male"
+colnames(df3)[1] <- "WT Female"
+colnames(df4)[1] <- "ScAnemia Female"
+
+
+#ADDING AND CHANING POSITION OF ROWNAMES
+df1 <- df1
+df1 <- rbind(df1, 'Inflammatory Monocytes' = 0)
+
+new_order <- c(rownames(df1)[1:10], "Inflammatory Monocytes", rownames(df1)[11:17])
+# Reorder the DataFrame rows
+df1 <- df1[new_order, , drop = FALSE]
+
+
+
+df <- cbind(df1, df2, df3, df4)
+
+
+library(ggplot2)
+library(tidyr)
+
+df$Cell_Type <- rownames(df)
+
+df$WT <- NA
+df$ScAnemia <- NA
+df$WT <- df$`WT Male` + df$`WT Female`
+df$ScAnemia <- df$`ScAnemia Male` + df$`ScAnemia Female`
+
+
+
+# Convert data frame to long format
+df_long <- pivot_longer(df, cols = c("WT", "ScAnemia"),
+                        names_to = "Condition", values_to = "Count")
+
+
+library(gridExtra)
+library(ggplot2) 
+
+
+# Create grouped bar plot
+p <- ggplot(df_long, aes(x = Cell_Type, y = Count, fill = Condition)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = Count), 
+          position = position_stack(vjust = 0.5), # Position the text labels in the middle of each bar section
+          size = 3, color = "black") +
+  labs(x = "Cell Type", y = "Count", title = "Comparison of Counts by Condition for Each Cell Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+# Open a PNG device to save the output as a high-resolution image (300 dpi)
+png("ParseAnn2_sickle_number_only_condition.png", width = 9, height = 11, units = "in", res = 300) #7
+
+# Arrange and save all plots in a grid with 3 columns
+p
+
+# Close the graphics device
+dev.off()
+
+length(df$WT)
+df_long$total <- NA
+df_long$total[df_long$Condition == "WT"] <- 16859
+df_long$total[df_long$Condition == "ScAnemia"] <- 14743
+
+
+
+df_long$count_percent <- NA
+df_long$count_percent <- (df_long$Count * 100) / df_long$total
+
+
+
+
+
+p <- ggplot(df_long, aes(x = Cell_Type, y = count_percent, fill = Condition)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = sprintf("%.1f", count_percent)), 
+          position = position_stack(vjust = 0.5), # Position the text labels in the middle of each bar section
+          size = 3, color = "black") +
+  labs(x = "Cell Type", y = "Count", title = "Percentage Comparison of Counts by Condition for Each Cell Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+png("ParseAnn2_sickle_percentage_only_condition.png", width = 9, height = 11, units = "in", res = 300) #7
+
+# Arrange and save all plots in a grid with 3 columns
+p
+
+# Close the graphics device
+dev.off()
+
+
+
+
+```
+
+
+
+
+
+
+
+```{r, fig.height=12, fig.width=15}
+rownames(sickle_cell)[grep("Hba", rownames(sickle_cell))]
+
+#[1] "Hbb-bt"= thalesemia, "Hbb-bs"= sickle_cell_anmia "Hbb-y"
+#[1] "Hba-x"  "Hba-a2" "Hba-a1"
+FeaturePlot(sickle_cell, "Hbb-bs", split.by = "condition")
+
+DotPlot(sickle_cell,  "Hbb-bs", group.by = "condition", scale.min = 0)
+DotPlot(sickle_cell,  "Hbb-bt", group.by = "condition", scale.min = 0)
+DotPlot(sickle_cell,  "Hba-x", group.by = "condition", scale.min = 0)
+DotPlot(sickle_cell,  "Hba-a1", group.by = "condition", scale.min = 0)
+DotPlot(sickle_cell,  "Hba-a2", group.by = "condition", scale.min = 0)
+
+
+DotPlot(RNA_ScAnemia,  "Hbb-bs", group.by = "group", scale.min = 0)
+DotPlot(RNA_ScAnemia,  "Hbb-bt", group.by = "group", scale.min = 0)
+DotPlot(RNA_ScAnemia,  "Hba-x", group.by = "group", scale.min = 0)
+DotPlot(RNA_ScAnemia,  "Hba-a1", group.by = "group", scale.min = 0)
+DotPlot(RNA_ScAnemia,  "Hba-a2", group.by = "group", scale.min = 0)
+
+
+```
+
+
+
+
+
+
+
+```{r}
+sickle_cell$condition <- NA 
+
+sickle_cell$condition <- ifelse(sickle_cell$group %in% c("WT Male", "WT Female"), 
+                                "WT", 
+                                "ScAnemia")
+  getwd()
+  
+  table(sickle_cell$condition)
+```
+
+#yes
+```{r}
+
+NOS_flow_genes <- c(
+  "Nos3",    # Endothelial nitric oxide synthase (eNOS)
+  "Nos2",    # Inducible nitric oxide synthase (iNOS)
+  "Vcam1",   # Vascular cell adhesion molecule 1
+  "Gch1",    # GTP cyclohydrolase 1
+  "Arg1",    # Arginase 1
+  "Arg2",    # Arginase 2
+  "Slc7a1",  # Cationic amino acid transporter 1
+  "Edn1",    # Endothelin-1
+  "Cyp2c9",  # Cytochrome P450 family 2 subfamily C member 9
+  "Cyp2c19", # Cytochrome P450 family 2 subfamily C member 19
+  "Akt1",    # Protein kinase B (Akt1)
+  "Pde5a"    # Phosphodiesterase 5A
+)
+
+
+sca_lung_rat_genes <- c(
+  # Hypoxia Response
+  "Hif1a", "Epo", "Vegfa", 
+
+  # Endothelial Dysfunction and Adhesion
+  "Vcam1", "Icam1", "Sele", "Selplg",
+
+  # Inflammation
+  "Il6", "Tnf", "Nfkb1", "Cxcl8", "Ccl2", "Cxcl10",
+
+  # Oxidative Stress
+  "Nos3", "Sod1", "Gclc", 
+
+  # Hemoglobin Regulation (Updated)
+  "Hbb-bt", "Hbb-bs", "Hbs1l", "Hba-x", "Hba-a1", "Hba-a2", "Hbq1a", "Hbb-y", 
+
+  # Lung-Enriched Genes
+  "Sftpa1", "Sftpb", "Sftpc", "Ace", "Edn1"
+)
+
+
+
+DotPlot(sickle_cell, NOS_flow_genes, group.by = "condition", scale.min = 0) + coord_flip()
+DotPlot(sickle_cell, NOS_flow_genes, group.by = "group", scale.min = 0) + coord_flip() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+yes <- c("WT Male", "ScAnemia Male", "WT Female", "ScAnemia Female")
+
+yes1 <- unique(sickle_cell$group)
+setdiff(yes, yes1)
+sickle_cell$group <- factor(sickle_cell$group, yes)
+
+#HEATMAP
+
+
+```
+
+
+
+
+```{r}
+
+sca_lung_rat_genes <- c(
+  # Hypoxia Response
+  "Hif1a", "Epo", "Vegfa", 
+
+  # Endothelial Dysfunction and Adhesion
+  "Vcam1", "Icam1", "Sele", "Selplg",
+
+  # Inflammation
+  "Il6", "Tnf", "Nfkb1", "Cxcl8", "Ccl2", "Cxcl10",
+
+  # Oxidative Stress
+  "Nos3", "Sod1", "Gclc", 
+
+  # Hemoglobin Regulation (Updated)
+  "Hbb-bt", "Hbb-bs", "Hbs1l", "Hba-x", "Hba-a1", "Hba-a2", "Hbq1a", "Hbb-y", 
+
+  # Lung-Enriched Genes
+  "Sftpa1", "Sftpb", "Sftpc", "Ace", "Edn1"
+)
+
+#1-
+# integrated
+library(ComplexHeatmap)
+library(dplyr)
+library(Seurat)
+expression_data_deg <- FetchData(sickle_cell, vars = sca_lung_rat_genes)
+groups <- sickle_cell$group
+#1: 
+group_raw_averages <- compute_group_averages(expression_data_deg, groups)
+#2:
+#Scale -2 to +2
+scaled_data_Deg <- apply(group_raw_averages[, -1], 2, scale_to_range)
+# Convert the summarized data back to a matrix for heatmap
+heatmap_matrix <- as.matrix(scaled_data_Deg)  # Exclude the group column (now rows are groups)
+rownames(heatmap_matrix) <- group_raw_averages$group  # Set group names as row names
+heatmap_matrix <- t(heatmap_matrix)
+# Generate the heatmap
+p <- Heatmap(
+  heatmap_matrix,
+  name = "Expression",
+  cluster_rows = FALSE,         # Cluster genes
+  cluster_columns = FALSE,      # Cluster groups
+  show_row_names = TRUE,       # Show gene names
+  show_column_names = TRUE,    # Show group names
+  column_names_side = "top",
+  row_names_side = "left",
+   row_names_gp = gpar(fontsize = 10)  # General text size for row names
+    # Only label rows in 'markers'
+)
+print(p)
+
+```
+
+# THE GROUPS ADDED!!!!
+
+```{r, fig.height=10, fig.width=6}
+# Define gene categories
+gene_categories <- c(
+  # Hypoxia Response
+  "Hif1a" = "Hypoxia Response", "Epo" = "Hypoxia Response", "Vegfa" = "Hypoxia Response",
+  
+  # Endothelial Dysfunction and Adhesion
+  "Vcam1" = "Endothelial Dysfunction and Adhesion", 
+  "Icam1" = "Endothelial Dysfunction and Adhesion",
+  "Sele" = "Endothelial Dysfunction and Adhesion", 
+  "Selplg" = "Endothelial Dysfunction and Adhesion",
+  
+  # Inflammation
+  "Il6" = "Inflammation", "Tnf" = "Inflammation", "Nfkb1" = "Inflammation", 
+  "Cxcl8" = "Inflammation", "Ccl2" = "Inflammation", "Cxcl10" = "Inflammation",
+  
+  # Oxidative Stress
+  "Nos3" = "Oxidative Stress", "Sod1" = "Oxidative Stress", "Gclc" = "Oxidative Stress",
+  
+  # Hemoglobin Regulation
+  "Hbb-bt" = "Hemoglobin Regulation", "Hbb-bs" = "Hemoglobin Regulation",
+  "Hbs1l" = "Hemoglobin Regulation", "Hba-x" = "Hemoglobin Regulation",
+  "Hba-a1" = "Hemoglobin Regulation", "Hba-a2" = "Hemoglobin Regulation",
+  "Hbq1a" = "Hemoglobin Regulation", "Hbb-y" = "Hemoglobin Regulation",
+  
+  # Lung-Enriched Genes
+  "Sftpa1" = "Lung-Enriched Genes", "Sftpb" = "Lung-Enriched Genes",
+  "Sftpc" = "Lung-Enriched Genes", "Ace" = "Lung-Enriched Genes", 
+  "Edn1" = "Lung-Enriched Genes"
+)
+
+# Create row annotations
+row_annotation <- rowAnnotation(
+  Category = factor(gene_categories[rownames(heatmap_matrix)]),
+  col = list(Category = c(
+    "Hypoxia Response" = "blue",
+    "Endothelial Dysfunction and Adhesion" = "green",
+    "Inflammation" = "red",
+    "Oxidative Stress" = "purple",
+    "Hemoglobin Regulation" = "orange",
+    "Lung-Enriched Genes" = "brown"
+  ))
+)
+
+# Generate the heatmap
+p <- Heatmap(
+  heatmap_matrix,
+  name = "Expression",
+  cluster_rows = FALSE,
+  cluster_columns = FALSE,
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  column_names_side = "top",
+  row_names_side = "left",
+  row_names_gp = gpar(fontsize = 10),
+  left_annotation = row_annotation
+)
+
+# Print the heatmap
+print(p)
+
+```
+
+#LASTCALL
+
+```{r, fig.width=17, fig.height=19}
+library(ggplot2)
+p3 <- DimPlot(sickle_cell, group.by = "Last_Call", label = F) + 
+  theme(legend.position = "bottom") + ggtitle("Last_Call")
+LabelClusters(p3, id = "Last_Call", fontface = "bold", 
+                    size = 5)
+```
+
+```{r, fig.width=30, fig.height=12}
+library(ggplot2)
+DimPlot(sickle_cell, group.by = "Last_Call", label = F, split.by = "group", raster = F) + 
+  theme(legend.position = "bottom") + ggtitle("Last_Call") 
+
+```
+
+```{r}
+FeaturePlot(sickle_cell, "Gja5", order = F)
+```
+```{r, fig.width=17, fig.height=19}
+library(ggplot2)
+p3 <- DimPlot(sickle_cell, group.by = "origin_of_cells_nounk", label = F) + 
+  theme(legend.position = "bottom") + ggtitle("origin_of_cells_nounk")
+LabelClusters(p3, id = "origin_of_cells_nounk", fontface = "bold", 
+                    size = 5)
+
+library(ggplot2)
+p3 <- DimPlot(sickle_cell, group.by = "origin_of_cells_with_unk", label = F) + 
+  theme(legend.position = "bottom") + ggtitle("origin_of_cells_with_unk")
+LabelClusters(p3, id = "origin_of_cells_with_unk", fontface = "bold", 
+                    size = 5)
+
+FeaturePlot(sickle_cell, "Pecam1", order = F)
+
+```
+```{r,fig.height=7, fig.width=15}
+DimPlot(sickle_cell, group.by = "Last_Call", label = F, cells.highlight = colnames(sickle_cell)[sickle_cell$Last_Call == "Alveolar Macrophages"], split.by = "group") + 
+  theme(legend.position = "bottom") + ggtitle("Alveolar Macrophages in Last_Call")
+
+DimPlot(sickle_cell, group.by = "Parse_Ann2", label = F, cells.highlight = colnames(sickle_cell)[sickle_cell$Parse_Ann2 == "T cells"], split.by = "group") + 
+  theme(legend.position = "bottom") + ggtitle("T cells in Last_Call")
+
+DimPlot(sickle_cell, group.by = "Parse_Ann2", label = F, cells.highlight = colnames(sickle_cell)[sickle_cell$Parse_Ann2 == "Pericytes"], split.by = "group") + 
+  theme(legend.position = "bottom") + ggtitle("Pericytes in Last_Call")
+
+DimPlot(sickle_cell, group.by = "Last_Call", label = F, cells.highlight = colnames(sickle_cell)[sickle_cell$Last_Call == "Myofibroblasts"], split.by = "group") + 
+  theme(legend.position = "bottom") + ggtitle("Myofibroblasts in Last_Call")
+
+
+table(sickle_cell$Parse_Ann2)
+```
+
+
+
+```{r, fig.height=7, fig.width=25}
+# Hemoglobin Regulation
+ Hbb_genes <- c("Hbb-bt", "Hbb-bs",
+  "Hbs1l", "Hba-x",
+  "Hba-a1", "Hba-a2",
+  "Hbq1a", "Hbb-y")
+
+FeaturePlot(sickle_cell,Hbb_genes, #split.by = "group"
+            )
+
+FeaturePlot(sickle_cell,"Hba-a2", split.by = "group"
+            )
+
+
+DimPlot(sickle_cell, label = T, label.size = 10) 
+
+Hbb <- subset(sickle_cell, seurat_clusters == 10)
+
+DimPlot(Hbb, label = T, label.size = 10) 
+FeaturePlot(Hbb,Hbb_genes)
+
+
+markersc <- c("Cd68", "Cd163", "Mrc1", "Marco", "Trem2", "Lamp1", "Lamp2", "Map1lc3b", "Vsig4")
+FeaturePlot(sickle_cell,markersc)
+
+FeaturePlot(sickle_cell,"Map1lc3b", split.by = "group")
+
+LC3B (MAP1LC3B)	Autophagy-related marker (often upregulated in macrophages digesting engulfed material)
+
+#kaldiikkkkkkkkkkkkkkkkkkkkk
+
+```
+
+
+
+
+
+```{r}
+
+library(ggplot2)
+DotPlot(Hbb, Hbb_genes, group.by = "group") + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+DotPlot(Hbb, c(
+   "Hbb-y"), group.by = "group") + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+
+# EC_flex ARTICLE REVISION MARKERS markers
+
+```{r}
+DimPlot(EC_flex_3, group.by = "Annotation")
+#EndIT EC
+DefaultAssay(EC_flex_3) <- "SCT"
+FeaturePlot(EC_flex_3, "TRBC2")
+FeaturePlot(EC_flex_3, "CD2")
+FeaturePlot(EC_flex_3, "ICOS", order = T)
+FeaturePlot(EC_flex_3, "CRTAM")
+FeaturePlot(EC_flex_3, "CD6")
+
+
+#Infla EC
+FeaturePlot(EC_flex_3, "SELE")
+FeaturePlot(EC_flex_3, "IL6")
+
+FeaturePlot(EC_flex_3, "ACKR1")
+
+#prolif EC
+FeaturePlot(EC_flex_3, "SEMA3G")
+FeaturePlot(EC_flex_3, "GJA5")
+
+#EC3
+FeaturePlot(EC_flex_3, "RGCC")
+FeaturePlot(EC_flex_3, "CD36")
+FeaturePlot(EC_flex_3, "RBP7")
+FeaturePlot(EC_flex_3, "CD300LG")
+FeaturePlot(EC_flex_3, "CA4")
+FeaturePlot(EC_flex_3, "TNFRSF4")
+FeaturePlot(EC_flex_3, "MT1M")
+
+
+FeaturePlot(EC_flex_3, "FABP4")
+
+
+```
+
+
+
+# NULLLLLLLL LETS CHECK SEX DIFFERENCE
+
+```{r}
+sickle_cell$ <- factor(c(rep("VPC1", n1), rep("VPC2", n2), rep("VPC3", n3), rep("VPC4", n4)))
+
+
+rm(list = setdiff(ls(), "sickle_cell"))
+```
+
+
+#----------------------------------------------------------------------------------------------------#----------------------------------------------------------------------------------------------------#----------------------------------------------------------------------------------------------------#--------------------------------------------------------------------------------------------------------------------------
+```{r}
+erythroid_markers <- c("Tfrc",  # Transferrin receptor (iron uptake, erythroid precursor marker)
+                       "Kit",  # Stem cell factor receptor (early erythroid marker)
+                       "Klf1",  # Key erythroid transcription factor
+                       "Gata1",  # Master regulator of erythroid lineage
+                       "Hba-a2", "Hbb",  # Hemoglobin subunits (definitive erythroid markers)
+                       "Gypa",  # Glycophorin A (mature RBC marker)
+                       "Fech",  # Ferrochelatase (heme biosynthesis)
+                       "Ahsp",  # Stabilizes hemoglobin
+                       "Slc2a39", "Slc1a4",  # Iron and amino acid transporters for erythropoiesis
+                       "Gpx1",  # Protects erythroid cells from oxidative stress
+                       "Bnip3l", "Map1lc3b")  # Autophagy genes for RBC maturation
+macrophage_markers <- c("Cd68",  # General macrophage marker
+                        "Cd163",  # Scavenger receptor (high in RBC-clearing macrophages)
+                        "Marco",  # Macrophage receptor involved in phagocytosis
+                        "Mrc1",  # CD206, mannose receptor (phagocytic macrophages)
+                        "Fcer1g",  # Fc receptor gamma (involved in phagocytosis)
+                        "Adgre1",  # F4/80, classic macrophage marker
+                        "Lyz2",  # Lysozyme, expressed in macrophages
+                        "Hamp",  # Hepcidin, involved in iron metabolism
+                        "Hmox1",  # Heme oxygenase 1, involved in RBC breakdown
+                        "Slc40a1",  # Ferroportin, regulates iron export
+                        "Fcgr1", "Fcgr2b")  # Fc receptors for immune functions
+
+```
+
+
+#
+
+```{r}
+
+p <- DimPlot(sickle_cell, label = F, group.by = "Parse_Ann") + NoLegend()
+    LabelClusters(p, id = "Parse_Ann", fontface = "bold", size = 5)
+    
+meta_data <- sickle_cell@meta.data
+
+
+```
+
+
+
+    ```{r}
+
+# ANALYSIS OF SICKLE CELL ABOVE 2-17-25
+
+
+
+
+```
+
+#CHECK
+
+```{r}
+
+#Idents(Endo_ScAnemia) <- Endo_ScAnemia$group
+#Endo_ScAnemia <- JoinLayers(Endo_ScAnemia, assay = "RNA")
+find_and_save_markers <- function(seurat_obj) {
+  # Define the identifier pairs within the function
+  for (i in sub_endo) {
+    seurat_obj <- subset(Endo_ScAnemia, annot1 %in% i)
+      ident_pairs <- list(
+    c("WT Female", "WT_Male"),
+    c("ScAnemia Female", "WT Female"),
+    c("ScAnemia Male", "WT_Male"),
+    c("ScAnemia Female", "ScAnemia Male")
+      )
+        # Loop through each pair and find markers
+        for (pair in ident_pairs) {
+              # Extract ident.1 and ident.2 from the pair
+              ident_1 <- pair[1]
+                  ident_2 <- pair[2]
+                      # Find markers
+                      markers <- FindMarkers(seurat_obj, ident.1 = ident_1, ident.2 = ident_2, only.pos = FALSE)
+                      
+                          # Select top 33 markers based on avg_log2FC
+                          top_markers <- markers %>% 
+                                  filter(p_val_adj < 0.05) %>% 
+                                  slice_max(order_by = avg_log2FC, n = 50)
+                          
+                              # Create a filename based on the identifiers
+                              filename <- paste0(i, "_", ident_1, "_vs_", ident_2, ".csv")
+                                  # Write the markers to a CSV file
+                                  write.csv(top_markers, filename)
+                                      # Print a message indicating progress
+                                      print(paste("Markers for", ident_1, "vs", ident_2, "saved to", filename))
+        }
+  }
+}
+
+# Run the function
+find_and_save_markers(Endo_ScAnemia)
+
+
+
+```
+
+```{r}
+library(clusterProfiler)
+library(org.Hs.eg.db)  # For human, use org.Mm.eg.db for mouse
+library(enrichplot)
+library(ggplot2)
+
+#1558 pATHWAY ANALYSIS
+getwd()
+
+```
+
+
+#RASA3 - Prohaska, Clare Colette
+
+```{r, fig.height=4, fig.width=7}
+library(Seurat)
+DimPlot(sickle_cell)
+
+DotPlot(sickle_cell, "Rasa3")
+
+cell_pops <- unique(sickle_cell$Parse_Ann2)
+for(i in cell_pops){
+  Idents(sickle_cell) <- sickle_cell$Parse_Ann2
+p <- DotPlot(sickle_cell, idents = i, "Rasa3", split.by = "condition", scale.min = 0)
+png(paste0("./RASA3/", i, "_RASA3.png"), width = 7, height = 5, res = 300, units = "in" )
+print(p)
+dev.off()
+}
+
+
+
+cell_pops <- unique(sickle_cell$Parse_Ann2)
+for (i in cell_pops) {
+  Idents(sickle_cell) <- sickle_cell$Parse_Condition
+  
+  # Select cells that contain 'i' in their names across different groups
+  selected_cells <- grep(i, sickle_cell$Parse_Condition, value = TRUE) 
+
+  # If there are matching cells, generate a DotPlot
+  if (length(selected_cells) > 0) {
+    p <- DotPlot(sickle_cell, features = "Rasa3", idents = selected_cells, scale.min = 0)
+
+    # Save the plot
+    png(paste0("./RASA3_1/", i, "_RASA3.png"), width = 7, height = 5, res = 300, units = "in")
+    print(p)
+    dev.off()
+  }
+}
+
+sickle_cell$Parse_Condition <- NA
+sickle_cell$Parse_Condition <- paste(sickle_cell$condition, sickle_cell$Parse_Ann2)
+
+
+getwd()
+LinkedDimPlot(WSA_LngSP10193346)
+LinkedFeaturePlot(anchored_spas, "ACKR1"
+                  , alpha = 0.1
+                  )
+
+LinkedDimPlot(anchored_spas)
+print(p)
+
+LinkedFeaturePlot(anchored_spas, "ACKR1")
+
+SpatialDimPlot(WSA_LngSP10193346, alpha = 1)
+library(ggplot2)
+SpatialFeaturePlot(WSA_LngSP10193346, "PECAM1") + theme(legend.text = element_text(size = 5))
+
+rm(anchored_spas)
+?LinkedDimPlot
+
+```
+
+
+SpatialFeaturePlot(WSA_LngSP10193346, "PECAM1", pt.size = 4)
+SpatialFeaturePlot(WSA_LngSP10193346, "PECAM1", pt.size = 5) + theme(legend.text = element_text(size = 5))
+
+SpatialDimPlot(WSA_LngSP10193346, pt.size = 5, label = T) + theme(legend.text = element_text(size = 5)) + NoLegend()
+
+?SpatialDimPlot
+
+
+
+#DOIT
+
+
+
+#WORKED
+```{r}
+
+
+library(Seurat)
+library(ggplot2)
+
+# List of identity pairs for DEG comparisons
+ident_pairs <- list(
+  c("WT Female", "WT Male"),
+  c("ScAnemia Female", "WT Female"),
+  c("ScAnemia Male", "WT Male"),
+  c("ScAnemia Female", "ScAnemia Male"),
+  c("WT Male", "WT Female"),
+  c("WT Female", "ScAnemia Female"),
+  c("WT Male", "ScAnemia Male"),
+  c("ScAnemia Male", "ScAnemia Female")
+)
+
+# Create a dataframe to store results
+deg_counts_df <- data.frame(Cell_Group = character(),
+                            Pair_Comparison = character(),
+                            DEG_Count = numeric(),
+                            stringsAsFactors = FALSE)
+
+# Loop through unique cell populations
+cell_pops <- unique(sickle_cell$Parse_Ann2)
+
+for (i in cell_pops) {
+  # Subset the dataset for the given cell group
+  sickle_subset <- subset(sickle_cell, Parse_Ann2 == i)
+  
+  # Loop through each identity pair
+  for (pair in ident_pairs) {
+    ident_1 <- pair[1]
+    ident_2 <- pair[2]
+    
+    # Check if both identities exist in the subset
+    if (all(c(ident_1, ident_2) %in% sickle_subset$group)) {
+      
+      # Perform DEG analysis
+      degs <- FindMarkers(sickle_subset, ident.1 = ident_2, ident.2 = ident_1, 
+                          assay = "RNA", group.by = "group", only.pos = TRUE)
+      
+      # Filter significant DEGs (adjusted p-value < 0.05)
+      significant_degs <- degs[degs$p_val_adj < 0.05, ]
+      deg_count <- nrow(significant_degs)  # Count significant DEGs
+      
+      # Store results in dataframe
+      deg_counts_df <- rbind(deg_counts_df, 
+                             data.frame(Cell_Group = i, 
+                                        Pair_Comparison = paste(ident_1, "vs", ident_2), 
+                                        DEG_Count = deg_count))
+    }
+  }
+}
+
+# Save DEG counts to a CSV file
+write.csv(deg_counts_df, "DEG_counts_per_cell_group.csv", row.names = FALSE)
+
+# Plot the results
+ggplot(deg_counts_df, aes(x = Pair_Comparison, y = DEG_Count, fill = Cell_Group)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "DEG Counts per Cell Group & Pair Comparison", 
+       x = "Pair Comparison", y = "Number of DEGs") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+getwd()
+
+
+
+
+```
+
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+deg_counts_df <- read.csv("DEG_counts_per_cell_group.csv")
+# Split the "Pair_Comparison" column into two new columns ("From" and "To")
+deg_counts_df <- deg_counts_df %>%
+  separate(Pair_Comparison, into = c("To", "From"), sep = " vs ", remove = FALSE) %>%
+  select(Cell_Group, To, From, Pair_Comparison, DEG_Count)  # Reorder columns
+
+df <- deg_counts_df
+df <- df[, -4]
+df <- df %>%
+  select(1, 3, 2, everything())
+df_conserve <- df
+rm(d)
+```
+
+#WORKING making graph- ELHAMDULILLAH
+```{r}
+ # Filter for one cell type
+  df <- df_conserve[df_conserve$Cell_Group == "AT2 cells", ]
+
+# Assign x, y coordinates for plotting
+positions <- data.frame(
+  Group = unique(c(df$From, df$To)),
+  x = c(0, 2, -2, 0),
+  y = c(2, 0, 0, -2)
+)
+
+# Merge coordinates to main data
+df <- df %>%
+  left_join(positions, by = c("From" = "Group")) %>%
+  rename(x_start = x, y_start = y) %>%
+  left_join(positions, by = c("To" = "Group")) %>%
+  rename(x_end = x, y_end = y)
+
+
+df$x_end <- df$x_start + (df$x_end - df$x_start) * 0.75  
+df$y_end <- df$y_start + (df$y_end - df$y_start) * 0.75  
+
+# Plot the directed graph with arrows
+ggplot() +
+  # Arrows for connections
+  geom_curve(data = df, aes(x = x_start, y = y_start, xend = x_end, yend = y_end), 
+             curvature = -0.5, arrow = arrow(length = unit(0.2, "inches")), size = 1.2, color = "red") +
+
+  # Labels for DEG counts above the arrows
+  geom_text(data = df, aes(x = (x_start + x_end) / 2, y = (y_start + y_end) / 2 + ifelse(y_start > y_end, 0.5, -0.5), 
+                                      label = paste(DEG_Count, "degs")), 
+            color = "black", fontface = "bold", size = 5) +
+
+  # Labels for each group (WT Male, WT Female, etc.)
+  geom_label(data = positions, aes(x = x, y = y, label = Group), 
+             color = "black", fontface = "bold", fill = "yellow", size = 5) +
+
+  
+  # EXPAND GRAPH AREA
+  xlim(min(df$x_start) - 1, max(df$x_end) + 1) +  # Increase left/right range
+  ylim(min(df$y_start) - 1, max(df$y_end) + 1) +  # Increase top/bottom range
+  # Customize theme
+  theme_void() +
+  labs(title = "DEG Count Flowchart", x = "", y = "")
+
+
+
+
+```
+
+
+```{r, fig.height=8, fig.width=8}
+
+library(ggplot2)
+library(dplyr)
+
+# Ensure directory exists
+dir.create("./DEGs", showWarnings = FALSE)
+
+cell_pop <- unique(df_conserve$Cell_Group)
+
+for (i in cell_pop) {
+  # Filter for one cell type
+  df_subset <- df_conserve[df_conserve$Cell_Group == i, ]
+
+  # Get unique groups from 'From' and 'To' columns
+  unique_groups <- unique(c(df_subset$From, df_subset$To))
+  n <- length(unique_groups)  # Number of unique groups
+
+  # Dynamically assign positions (circular layout)
+  angles <- seq(0, 2 * pi, length.out = n + 1)[-1]  # Evenly spaced angles
+  positions <- data.frame(
+    Group = unique_groups,
+    x = cos(angles) * 3,  # Spread in a circular shape
+    y = sin(angles) * 3
+  )
+
+  # Merge coordinates to main data
+  df_subset <- df_subset %>%
+    left_join(positions, by = c("From" = "Group")) %>%
+    rename(x_start = x, y_start = y) %>%
+    left_join(positions, by = c("To" = "Group")) %>%
+    rename(x_end = x, y_end = y)
+
+  # Shorten arrows to avoid overlap
+  df_subset$x_end <- df_subset$x_start + (df_subset$x_end - df_subset$x_start) * 0.75  
+  df_subset$y_end <- df_subset$y_start + (df_subset$y_end - df_subset$y_start) * 0.75  
+
+  # Define axis limits safely
+  x_limits <- range(df_subset$x_start, df_subset$x_end) + c(-1, 1)
+  y_limits <- range(df_subset$y_start, df_subset$y_end) + c(-1, 1)
+
+  # Create the plot
+  p <- ggplot() +
+    # Arrows for connections
+    geom_curve(data = df_subset, aes(x = x_start, y = y_start, xend = x_end, yend = y_end), 
+               curvature = -0.4, arrow = arrow(length = unit(0.2, "inches")), size = 1.2, color = "red") +
+
+    # Labels for DEG counts
+    geom_text(data = df_subset, aes(
+        x = (x_start + x_end) / 2 + ifelse(x_start > x_end, 0.3, -0.3),  
+        y = (y_start + y_end) / 2 + ifelse(y_start > y_end, 0.5, -0.5),  
+        label = paste(DEG_Count, "degs")), 
+        color = "black", fontface = "bold", size = 5) +
+
+    # Labels for each group
+    geom_label(data = positions, aes(x = x, y = y, label = Group), 
+               color = "black", fontface = "bold", fill = "yellow", size = 5) +
+
+    # Expand graph area
+    xlim(x_limits) + ylim(y_limits) +
+
+    # Customize theme
+    theme_void() +
+    labs(title = paste("DEG Count Flowchart for", i), x = "", y = "")
+
+  # Save the plot
+  png(paste0("./DEGs/", i, ".png"), height = 8, width = 8, res = 300, units = "in")
+  print(p)
+  dev.off()
+}
+
+
+write.csv(df_conserve, "all_degs_per_cell_condition.csv")
+
+```
+
+
+#NETWORK WORKED
+```{r}
+library(igraph)
+df_split <- split(df_conserve, df_conserve$Cell_Group)
+
+for (cell_type in names(df_split)) {
+  df_sub <- df_split[[cell_type]]
+  graph <- graph_from_data_frame(df_sub[, c("From", "To")], directed = TRUE)
+  png(paste0("./Network_", cell_type, ".png"), width = 800, height = 800, res = 150)
+  plot(graph, vertex.size = 15, edge.width = df_sub$DEG_Count / max(df_sub$DEG_Count) * 5)
+  dev.off()
+}
+
+```
+
+#CHORD WORKED
+```{r}
+library(circlize)
+df_split <- split(df_conserve, df_conserve$Cell_Group)  # Separate by Cell_Group
+
+for (cell_type in names(df_split)) {
+  df_sub <- df_split[[cell_type]]
+  png(paste0("./Chord_", cell_type, ".png"), width = 800, height = 800, res = 150)
+  chordDiagram(df_sub[, c("From", "To", "DEG_Count")], 
+               transparency = 0.5, grid.col = c("WT" = "blue", "Sickle" = "red"))
+  dev.off()
+}
+```
+
+
+
+# ANALYSIS OF SICKLE CELL ABOVE
+
+
+#----------------------------------------------------------------------------------------------------#----------------------------------------------------------------------------------------------------#----------------------------------------------------------------------------------------------------#--------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Smc_pericytes
+
+```{r, fig.height=8, fig.width=15}
+
+library(Seurat)
+sickle_cell <- JoinLayers(sickle_cell, assay = "RNA")
+
+sickle_cell_ 
+
+
+Idents(sickle_cell) <- sickle_cell$group
+
+
+Diet_sickle <- DietSeurat(sickle_cell, scale.data = )
+
+Diet_sickle@graphs$integrated_nn <- NULL
+Diet_sickle@assays[["RNA"]]@layers[["scale.data.4"]] <- NULL
+Diet_sickle@assays[["RNA"]]@meta.data <- NULL
+
+rm(Diet_sickle)
+```
+
+
+
+
+```{r}
+
+
+sickle_cell$group <- factor(sickle_cell$group, levels = c("WT Male", "ScAnemia Male", "WT Female", "ScAnemia Female"))
+
+```
+
+```{r}
+
+library(dplyr)
+      ident_pairs <- list(
+    c("ScAnemia Male", "WT Male"),
+    c("ScAnemia Female", "ScAnemia Male"),
+    c("WT Female", "WT Male"),
+    c("ScAnemia Female", "WT Female"),
+    c("WT Male", "ScAnemia Female"),
+    c("ScAnemia Female", "WT Male")
+      )
+        # Loop through each pair and find markers
+        for (pair in ident_pairs) {
+              # Extract ident.1 and ident.2 from the pair
+              ident_1 <- pair[1]
+                  ident_2 <- pair[2]
+                      # Find markers
+                      markers <- FindMarkers(sickle_cell, ident.1 = ident_1, ident.2 = ident_2, only.pos = FALSE)
+                      
+                          # Select top 33 markers based on avg_log2FC
+                          top_markers <- markers %>% 
+                                  filter(p_val_adj < 0.05) 
+                          #%>% 
+                                  #slice_max(order_by = avg_log2FC
+                                            #, n = 50
+                                            #)
+                          
+                              # Create a filename based on the identifiers
+                              filename <- paste0("Whole_lung", "_", ident_1, "_vs_", ident_2, ".csv")
+                                  # Write the markers to a CSV file
+                                  write.csv(top_markers, filename)
+                                      # Print a message indicating progress
+                                      print(paste("Markers for", ident_1, "vs", ident_2, "saved to", filename))
+        }
+
+# Run the function
+#find_and_save_markers(Endo_ScAnemia)
+
+
+
+```
+
+
+```{r}
+for (i in 1:4) {
+  
+ p <-  DotPlot(sickle_list[[i]], Hbb_genes, group.by = "orig.ident") + theme(axis.text.x = element_text(angle = 45, hjust =1))
+ print(p)
+  
+}
+
+ DotPlot(sickle_list[[3]], Hbb_genes, group.by = "orig.ident") + theme(axis.text.x = element_text(angle = 45, hjust =1))
+ 
+ DotPlot(sickle_cell, Hbb_genes, group.by = "orig.ident") + theme(axis.text.x = element_text(angle = 45, hjust =1))
+  DotPlot(sickle_cell, Hbb_genes, group.by = "group") + theme(axis.text.x = element_text(angle = 45, hjust =1))
+
+```
+
+#FindAllMarkers
+
+
+```{r, fig.height=25, fig.width=19}
+
+sickle_cell_markers <- FindAllMarkers(sickle_cell, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 1, return.thresh = 0.5, group.by = "group")
+
+DoHeatmap(sickle_cell, sickle_cell_markers$gene, group.by = "group")
+
+
+
+```
+
+```{r}
+
+#1-
+# integrated
+library(ComplexHeatmap)
+library(dplyr)
+library(Seurat)
+expression_data_deg <- FetchData(sickle_cell, vars = sickle_cell_markers$gene)
+groups <- sickle_cell$group
+#1: 
+group_raw_averages <- compute_group_averages(expression_data_deg, groups)
+#2:
+#Scale -2 to +2
+scaled_data_Deg <- apply(group_raw_averages[, -1], 2, scale_to_range)
+# Convert the summarized data back to a matrix for heatmap
+heatmap_matrix <- as.matrix(scaled_data_Deg)  # Exclude the group column (now rows are groups)
+rownames(heatmap_matrix) <- group_raw_averages$group  # Set group names as row names
+heatmap_matrix <- t(heatmap_matrix)
+# Generate the heatmap
+p <- Heatmap(
+  heatmap_matrix,
+  name = "Expression",
+  cluster_rows = FALSE,         # Cluster genes
+  cluster_columns = FALSE,      # Cluster groups
+  show_row_names = TRUE,       # Show gene names
+  show_column_names = TRUE,    # Show group names
+  column_names_side = "top",
+  row_names_side = "left",
+   row_names_gp = gpar(fontsize = 10)  # General text size for row names
+    # Only label rows in 'markers'
+)
+print(p)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+Idents(smc) <- smc$group
+#Endo_ScAnemia <- JoinLayers(Endo_ScAnemia, assay = "RNA")
+find_and_save_markers <- function(seurat_obj) {
+  # Define the identifier pairs within the function
+      ident_pairs <- list(
+    c("WT Female", "WT_Male"),
+    c("ScAnemia Female", "WT Female"),
+    c("ScAnemia Male", "WT_Male"),
+    c("ScAnemia Female", "ScAnemia Male")
+      )
+        # Loop through each pair and find markers
+        for (pair in ident_pairs) {
+              # Extract ident.1 and ident.2 from the pair
+              ident_1 <- pair[1]
+                  ident_2 <- pair[2]
+                      # Find markers
+                      markers <- FindMarkers(seurat_obj, ident.1 = ident_1, ident.2 = ident_2, only.pos = FALSE)
+                      
+                          # Select top 33 markers based on avg_log2FC
+                          top_markers <- markers %>% 
+                                  filter(p_val_adj < 0.05) %>% 
+                                  #filter(p_val_adj < 0.05) %>% 
+                                  #slice_max(order_by = avg_log2FC, n = 50)
+                                  slice_max(order_by = p_val_adj, n = 20)
+                          
+                              # Create a filename based on the identifiers
+                              filename <- paste0("SMC_ns_", "_", ident_1, "_vs_", ident_2, ".csv")
+                                  # Write the markers to a CSV file
+                                  write.csv(top_markers, filename)
+                                      # Print a message indicating progress
+                                      print(paste("Markers for", ident_1, "vs", ident_2, "saved to", filename))
+        }
+  }
+
+
+# Run the function
+find_and_save_markers(smc)
+
+```
+
+
+
+```{r, fig.height=6, fig.width=19}
+library(clusterProfiler)
+library(org.Hs.eg.db)  # For human, use org.Mm.eg.db for mouse
+library(enrichplot)
+library(ggplot2)
+
+DimPlot(Endo_ScAnemia, group.by = "annot1", label = T, split.by = "group")
+
+#Constructing the group name with ifelse
+Endo_ScAnemia$group <- ifelse(grepl("_1$", colnames(Endo_ScAnemia)), "WT Normoxia",
+                               ifelse(grepl("_2$", colnames(Endo_ScAnemia)), "WT Hypoxia",
+                                      ifelse(grepl("_3$", colnames(Endo_ScAnemia)), "ScAnemia Normoxia", "ScAnemia Hypoxia")))
+```
+```{r, fig.height=19, fig.width=19}
+
+
+p <- DimPlot(sickle_cell, label = F, group.by = "Parse_Ann") + NoLegend()
+    LabelClusters(p, id = "Parse_Ann", fontface = "bold", size = 5)
+    
+    table(smc$group)
+
+```
+
+
+```{r, fig.height=7, fig.width=8}
+
+FeaturePlot(sickle_cell, "ScAnemia", order = F)
+FeaturePlot(ScAnemia_perismc, "ScAnemia", order = T, split.by = "group")
+FeaturePlot(Stromal_parse_again, "ScAnemia", order = T)
+DimPlot(Stromal_parse_again, raster = F, group.by = "detailed_functional3", label = T)
+
+DotPlot(sickle_cell, "ScAnemia", group.by = "group", split.by = "Parse_general_group2", cols = c("red", "blue", "green", "orange", "yellow"))
+
+AT1 <- subset(sickle_cell, Parse_Ann %in% "AT1 cells")
+DimPlot(ScAnemia_perismc)
+
+
+DotPlot(AT1, "ScAnemia", group.by = "group")
+
+DotPlot(ScAnemia_perismc, "ScAnemia", group.by = "group")
+
+
+smc_tr <- subset(ScAnemia_perismc, Parse_StromAnn2 %in% c("Smooth muscle", "Transitional Pericytes"))
+
+
+DotPlot(ScAnemia_perismc, "Sphk2", group.by = "group")
+
+peri <- subset(ScAnemia_perismc, Parse_StromAnn2 %in% c("Pericytes"))
+
+table(ScAnemia_perismc$Parse_StromAnn2)
+
+
+
+DotPlot(Endo_ScAnemia, "Sphk2", group.by = "group")
+
+
+rownames(sickle_cell)[grep("Sk", rownames(sickle_cell))]
+
+
+for (i in list("Vpc1", "Vpc2", "Vpc3", "Vpc4")){
+  obj <- get(i)
+  p <- DotPlot(obj, "ScAnemia")
+  print(p)
+}
+
+DimPlot(Vpc1, label = T)
+
+
+for (i in list("Vpc1", "Vpc2", "Vpc3", "Vpc4")){
+  obj <- get(i)
+  p1 <- DimPlot(Vpc1, label = T)
+  p2 <- DimPlot(Vpc1, label = T, group.by = "Parse_Ann_i") + NoLegend()
+  print(p1)
+  print(p2)
+}
+
+
+
+DimPlot(Vpc1, label = T, group.by = "Parse_Ann_i") + NoLegend()
+
+rm(list = ls())
+
+DefaultAssay(Integ_SCT_mouse) <- "SCT"
+FeaturePlot(Integ_SCT_mouse, "ScAnemia")
+
+DimPlot(Integ_SCT_mouse, group.by = "IntegAnn", label = T) + NoLegend()
+
+
+getwd()
+
+```
+
+
+#11/20/2024 DUTIES
+
+```{r}
+
+genes <- c("ScAnemia", "Sphk2", "Spp1", "Spp2", "Cers1", "Cers2", "Cers3", "Cers4", "Cers5", "Cers6", "Degs1", "Ugcg","Sptlc1", "Sgpl1", "S1pr1", "S1pr2", "S1pr3", "S1pr4", "S1pr5", "Igsf3", "Smpd1", "Galc", "Gba", "Smpd2", "Smpd3",  "Asah1", "Asah2",  "Acer1", "Acer2", "Acer3",  "Sgms1", "Sgms2","Ifng", "Cxcl10", "Col4a3bp", "Lpp")
+#Whole lung
+  #featureplot
+for (i in genes){
+  f <- paste0("featureplots/Whole_lung_", i, ".png")
+  png(f, width = 19, height = 5, units = "in", res = 300)
+  p <- FeaturePlot(sickle_cell, features = i, split.by = "group")
+  print(p)
+  dev.off()
+}
+  
+  #dotplot
+for (i in genes){
+  f <- paste0("dotplots/Whole_lung_", i, ".png")
+  png(f, width = 7, height = 5, units = "in", res = 300)
+  p <- DotPlot(sickle_cell, features = i, group.by = "group1")
+  print(p)
+  dev.off()
+}
+
+
+#Smooth muscle-pericytes
+  #featureplot
+for (i in genes){
+  f <- paste0("featureplots/Smc_pericyte_", i, ".png")
+  png(f, width = 15, height = 5, units = "in", res = 300)
+  p <- FeaturePlot(ScAnemia_perismc, features = i, split.by = "group")
+  print(p)
+  dev.off()
+}
+  
+  #dotplot
+for (i in genes){
+  f <- paste0("dotplots/Smc_pericyte_", i, ".png")
+  png(f, width = 7, height = 5, units = "in", res = 300)
+  p <- DotPlot(ScAnemia_perismc, features = i, group.by = "group1")
+  print(p)
+  dev.off()
+}
+
+
+
+#Only Smooth muscle-
+  #featureplot
+for (i in genes){
+  f <- paste0("featureplots/Only_Smc_", i, ".png")
+  png(f, width = 15, height = 5, units = "in", res = 300)
+  p <- FeaturePlot(smc, features = i, split.by = "group")
+  print(p)
+  dev.off()
+}
+  
+  #dotplot
+for (i in genes){
+  f <- paste0("dotplots/Only_Smc_", i, ".png")
+  png(f, width = 7, height = 5, units = "in", res = 300)
+  p <- DotPlot(smc, features = i, group.by = "group1")
+  print(p)
+  dev.off()
+}
+  
+
+#Smc_w_transitional
+  #featureplot
+for (i in genes){
+  f <- paste0("featureplots/Smc_w_transitional_", i, ".png")
+  png(f, width = 15, height = 5, units = "in", res = 300)
+  p <- FeaturePlot(smc, features = i, split.by = "group")
+  print(p)
+  dev.off()
+}
+  
+  #dotplot
+for (i in genes){
+  f <- paste0("dotplots/Smc_w_transitional_", i, ".png")
+  png(f, width = 7, height = 5, units = "in", res = 300)
+  p <- DotPlot(smc, features = i, group.by = "group1")
+  print(p)
+  dev.off()
+}
+  
+
+#Endothelial cells
+
+
+for (i in genes){
+  f <- paste0("featureplots/Endothelial_subset_featureplots", i, ".png")
+  png(f, width = 19, height = 5, units = "in", res = 300)
+  p <- tryCatch(
+      {
+        FeaturePlot(Endo_ScAnemia, features = i, split.by = "group")
+      },
+      error = function(e) {
+        # Handle error and print message
+        print(paste("Error while creating FeaturePlot for gene:", i))
+        print(e)
+        dev.off()
+        NULL
+      }
+    )
+    # Print and save the plot if successful
+  if (!is.null(p)) {
+      print(p)
+  } else {
+      next
+    }
+  dev.off()
+  }
+
+
+
+sub_endo <- unique(Endo_ScAnemia$annot1)
+  
+  #dotplot WORKED
+sub_endo <- unique(Endo_ScAnemia$annot1)
+for (i in genes){
+  for(j in sub_endo){
+  f <- paste0("dotplots/Endothelial_subset_dotplots/", j, "_", i, ".png")
+  sub_seurat <- subset(Endo_ScAnemia, annot1 %in% j)
+  png(f, width = 7, height = 5, units = "in", res = 300)
+  p <- DotPlot(sub_seurat, features = i, group.by = "group1")
+  print(p)
+  dev.off()
+  }
+}
+
+
+
+
+# THSI WORKED WE SUBSET ALL CELLS IN FEATURE PLOT
+
+
+
+sub_endo <- unique(Endo_ScAnemia$annot1)
+
+# Loop through each gene and subgroup
+for (i in genes) {
+  for (j in sub_endo) {
+    # Construct the file path for saving the plot
+    f <- paste0("featureplots/Endothelial_subset_featureplots/", j, "_", i, ".png")
+    
+    # Subset the Seurat object by subgroup
+    sub_seurat <- subset(Endo_ScAnemia, annot1 %in% j)
+
+    # Check if subset is empty before proceeding
+    if (ncol(sub_seurat) == 0) {
+      print(paste("Skipping empty subset for group:", j))
+      next  # Skip to the next iteration if the subset is empty
+    }
+
+    # Check for missing values in the feature data
+    if (any(is.na(FetchData(sub_seurat, vars = i)))) {
+      print(paste("Skipping gene:", i, "in group:", j, "due to missing values."))
+      next  # Skip to the next iteration if there are missing values in the data
+    }
+
+    # Open PNG device to save the plot
+    png(f, width = 19, height = 5, units = "in", res = 300)
+
+    # Create the FeaturePlot for the specific gene in the subset
+    p <- tryCatch(
+      {
+        FeaturePlot(sub_seurat, features = i, split.by = "group")
+      },
+      error = function(e) {
+        # Handle error and print message
+        print(paste("Error while creating FeaturePlot for gene:", i, "in group:", j))
+        print(e)
+        NULL
+      }
+    )
+
+    # Print and save the plot if successful
+    if (!is.null(p)) {
+      print(p)
+    }
+
+    # Close the PNG device
+    dev.off()
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+ 
+ getwd() 
+  
+png("dene.png", width = 7, height = 5, units = "in", res = 300)
+ DotPlot(sickle_cell, features = "Pecam1", group.by = "group")
+dev.off()
+
+ 
+unique(factor(sickle_cell$group))
+
+
+
+
+#Constructing the group name with ifelse
+Endo_ScAnemia$group <- ifelse(grepl("_1$", colnames(Endo_ScAnemia)), "WT_Male",
+                               ifelse(grepl("_2$", colnames(Endo_ScAnemia)), "WT Female",
+                                      ifelse(grepl("_3$", colnames(Endo_ScAnemia)), "ScAnemia Male", "ScAnemia Female")))
+
+Endo_ScAnemia$group1 <- Endo_ScAnemia$group
+Endo_ScAnemia$group <- factor(Endo_ScAnemia$group, levels = c("WT_Male", "WT Female", "ScAnemia Male", "ScAnemia Female"))
+Endo_ScAnemia$group1 <- factor(Endo_ScAnemia$group1, levels = rev(c("WT_Male", "WT Female", "ScAnemia Male", "ScAnemia Female")))
+  
+?factor
+
+
+  
+#IFNA1 =Ifnar1
+#"Col4a3bp" = Cert
+
+rownames(sickle_cell)[grep("Ifn", rownames(sickle_cell))]
+
+FeaturePlot(Endo_ScAnemia, "Fabp4")
+
+DimPlot(Endo_ScAnemia, group.by = "annot1")
+
+```
+
+#PATHWAY ANALYSIS- ELHAMDULILLAH!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+```{r}
+
+library(org.Mm.eg.db)
+
+sickle_cell <- readRDS("C:/Users/skacar/OneDrive - Indiana University/PULMONARY POST DOC/SICKLE_PROJECT/sickle_cell_anemia_integrated_1_14_25.Rds")
+
+#Integration after RNA LogNormalize of ScAnemia (4 samples)Vcp1, WT, Vcp2, WT-Hypoxia, Vcp3, ScAnemia-WT, Vcp4, ScAnemia-Hypoxia
+
+WT_Male <- subset(sickle_cell, group %in% "WT_Male")
+WT Female  <- subset(sickle_cell, group %in% "WT Female")
+exp_norm <- as.matrix(WT_Male@assays[["RNA"]]@layers[["data"]])
+exp_hyp <- as.matrix(WT Female@assays[["RNA"]]@layers[["data"]])
+
+
+ref <- rowMeans(exp_norm)
+sample <- rowMeans(exp_hyp)
+rownames <- rownames(sickle_cell)
+names(ref) <- rownames
+names(sample) <- rownames
+
+comb <- cbind(ref, sample)
+comb <- as.data.frame(comb)
+comb$Entrezid <- NA
+
+# Convert gene symbols to Entrez IDs
+gene_symbols <- rownames(comb)  # Assuming these are your gene symbols
+entrez_ids <- mapIds(org.Mm.eg.db, 
+                     keys = gene_symbols, 
+                     column = "ENTREZID", 
+                     keytype = "SYMBOL", 
+                     multiVals = "first")
+
+comb$Entrezid <- entrez_ids
+
+filtered_comb <- comb[!is.na(comb$Entrezid), ]
+rownames(filtered_comb) <- filtered_comb$Entrezid
+
+filtered_comb <- as.data.frame(filtered_comb)
+filtered_comb <- as.matrix(filtered_comb[ , c("ref", "sample")])
+rownames <- rownames(filtered_comb)
+#change to numeric forcefully
+filtered_comb <- apply(filtered_comb, 2, as.numeric)
+rownames(filtered_comb) <- rownames
+any(!sapply(filtered_comb, is.numeric))  # Should return FALSE
+
+library(gageData)
+data(kegg.sets.mm)
+
+gage_results <- gage(exprs = filtered_comb, gsets = kegg.sets.mm)
+
+# View results
+print(gage_results$greater)  # Up-regulated pathways
+print(gage_results$less)     #
+
+View(gage_results$greater)
+
+write.csv(gage_results$greater, "with_means_gage.csv")
+
+
+
+
+```
+
+
+
+#TRY TO USE EXPRESSION MATRIXES -NULL
+
+```{r}
+rm(list = ls())
+
+library(org.Mm.eg.db)
+library(gageData)
+
+sickle_cell <-  readRDS("C:/Users/skacar/OneDrive - Indiana University/PULMONARY POST DOC/___ScAnemia_PROJECT____/sickle_cell_11_15_24.Rds") #Integration after RNA LogNormalize of ScAnemia (4 samples)Vcp1, WT, Vcp2, WT-Hypoxia, Vcp3, ScAnemia-WT, Vcp4, ScAnemia-Hypoxia
+
+WT_Male <- subset(sickle_cell, group %in% "WT_Male")
+WT Female  <- subset(sickle_cell, group %in% "WT Female")
+exp_norm <- as.matrix(WT_Male@assays[["RNA"]]@layers[["data"]])
+exp_hyp <- as.matrix(WT Female@assays[["RNA"]]@layers[["data"]])
+#ADD COL AND ROW NAMES CELLS AND GENES I MEAN
+colnames(exp_norm) <- colnames(WT_Male)
+colnames(exp_hyp) <- colnames(WT Female)
+rownames(exp_norm) <- rownames(WT_Male)
+rownames(exp_hyp) <- rownames(WT Female)
+
+
+# Convert gene symbols to Entrez IDs
+gene_symbols <- rownames(exp_norm)  # Assuming these are your gene symbols
+entrez_ids <- mapIds(org.Mm.eg.db, 
+                     keys = gene_symbols, 
+                     column = "ENTREZID", 
+                     keytype = "SYMBOL", 
+                     multiVals = "first")
+
+# Identify rows with valid Entrez IDs
+valid_rows <- !is.na(entrez_ids)
+# Filter the matrices
+exp_norm <- exp_norm[valid_rows, ]
+exp_hyp <- exp_hyp[valid_rows, ]
+
+entrez_ids <- entrez_ids[valid_rows]
+rownames(exp_norm) <- entrez_ids
+rownames(exp_hyp) <- entrez_ids
+
+exprs <- cbind(exp_norm, exp_hyp)
+
+# Define reference and sample columns
+ref_cols <- 1:ncol(exp_norm)
+samp_cols <- (ncol(exp_norm) + 1):ncol(exprs)
+
+
+
+#CHOOSE AS PROFILES
+# Aggregate by averaging across cells for each group
+ref_profile <- rowMeans(exprs[, ref_cols])  # WT_Male
+samp_profile <- rowMeans(exprs[, samp_cols])  # WT Female
+
+# Create a pseudobulk matrix
+exprs_pseudobulk <- cbind(ref_profile, samp_profile)
+
+library(gageData)
+data("kegg.mm.gs")
+# Run GAGE on pseudobulk profiles
+gage_results <- gage(exprs = exprs_pseudobulk, gsets = kegg.sets.mm, ref = 1, samp = 2, compare = "unpaired")
+
+
+
+
+class(gage_results$greater
+write.csv(gage_results$greater, "all_Cells_group_gage.csv")
+
+
+```
+
+
+
+
+#USE DEGS instead of NORMZALIZED MATRIX- ELHAMDULILLAH!!!!!
+
+#WT Female vs WT_Male
+
+```{r}
+library(Seurat)
+degs <- FindMarkers(sickle_cell, ident.1 = "WT Female", ident.2 = "WT_Male", assay = "RNA", group.by = "group")
+significant_degs <- degs[degs$p_val_adj < 0.05 & (degs$pct.1 > 0.1 | degs$pct.2 > 0.1),  ]
+
+library(org.Mm.eg.db)
+entrez_ids <- mapIds(org.Mm.eg.db,
+                     keys = rownames(significant_degs),
+                     column = "ENTREZID",
+                     keytype = "SYMBOL",
+                     multiVals = "first")
+names(entrez_ids) <- rownames(significant_degs)
+
+entrez_valid <- entrez_ids[!is.na(entrez_ids)]
+significant_degs <- significant_degs[names(entrez_valid), ]
+
+
+exprs_degs <- matrix(significant_degs$avg_log2FC, ncol = 1)
+rownames(exprs_degs) <- entrez_valid
+
+
+library(gageData)
+data("kegg.sets.mm")
+gage_results <- gage(exprs = exprs_degs, gsets = kegg.sets.mm, ref = NULL, samp = NULL, compare = "unpaired")
+
+p <- gage_results$stats
+#r <- gage_results$less
+P <- as.data.frame(p)
+
+P$mmu <- NA
+P$mmu <- rownames(P)
+# Remove the first word (everything before the first space) from rownames
+P$mmu <- sub(" .*", "", P$mmu)
+rownames(P) <- sub("^[^ ]+ ", "", rownames(P))
+P$pathways <- NA
+P$pathways <- rownames(P)
+
+
+P <- P[order(-P$stat.mean), ]
+#P <- P[-1, ] EXTRACT ROWS AS NEEDED
+top_df <- head(P, 20)
+
+```
+
+
+
+```{r}
+library(ggplot2)
+
+p <- ggplot(top_df, aes(x = reorder(pathways, stat.mean), y = stat.mean)) +
+    geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+   labs(title = "WT_Male vs WT Female for Whole Lung", x = "Pathways", y = "Mean Enrichment Score (stat.mean)") +
+  theme_minimal()
+
+png("PATHWAYS/WT_Male vs WT Female for Whole Lung_no_ribosome.png", width = 7, height = 5, units = "in", res = 300)
+p
+dev.off
+
+
+```
+
+
+
+
+#The other pairs
+
+```{r}
+
+ ident_pairs <- list(
+    c("WT Female", "WT_Male"),
+    c("ScAnemia Female", "WT Female"),
+    c("ScAnemia Male", "WT_Male"),
+    c("ScAnemia Female", "ScAnemia Male")
+    
+```
+
+
+#DO ALL PAIRWISE COMPARISONS GAGE KEGG
+```{r}
+
+ident_pairs <- list(
+c("WT Female", "WT_Male"),
+c("ScAnemia Female", "WT Female"),
+c("ScAnemia Male", "WT_Male"),
+c("ScAnemia Female", "ScAnemia Male"),
+c("WT_Male", "WT Female"),
+c("WT Female", "ScAnemia Female"),
+c("WT_Male", "ScAnemia Male"),
+c("ScAnemia Male", "ScAnemia Female")
+)
+        # Loop through each pair and find markers
+for (pair in ident_pairs) {
+  # Extract ident.1 and ident.2 from the pair
+  ident_1 <- pair[1]
+  ident_2 <- pair[2]
+  library(Seurat)
+  degs <- FindMarkers(ScAnemia_perismc, ident.1 = ident_2, ident.2 = ident_1, assay = "RNA", group.by = "group")
+  significant_degs <- degs[degs$p_val_adj < 0.05 & (degs$pct.1 > 0.1 | degs$pct.2 > 0.1),  ]
+  library(org.Mm.eg.db)
+  entrez_ids <- mapIds(org.Mm.eg.db,
+                     keys = rownames(significant_degs),
+                     column = "ENTREZID",
+                     keytype = "SYMBOL",
+                     multiVals = "first")
+  names(entrez_ids) <- rownames(significant_degs)
+  entrez_valid <- entrez_ids[!is.na(entrez_ids)]
+  significant_degs <- significant_degs[names(entrez_valid), ]
+  exprs_degs <- matrix(significant_degs$avg_log2FC, ncol = 1)
+  rownames(exprs_degs) <- entrez_valid
+  
+  library(gageData)
+  data("kegg.sets.mm")
+  gage_results <- gage(exprs = exprs_degs, gsets = kegg.sets.mm, ref = NULL, samp = NULL, compare = "unpaired")
+  p <- gage_results$stats
+  #r <- gage_results$less
+  P <- as.data.frame(p)
+  P$mmu <- NA
+  P$mmu <- rownames(P)
+  # Remove the first word (everything before the first space) from rownames
+  P$mmu <- sub(" .*", "", P$mmu)
+  rownames(P) <- sub("^[^ ]+ ", "", rownames(P))
+  P$pathways <- NA
+  P$pathways <- rownames(P)
+  P <- P[order(-P$stat.mean), ]
+  if ("Ribosome" %in% rownames(P[1:20, ])) {
+  # Remove the row corresponding to "Ribosome"
+  P <- P[rownames(P) != "Ribosome", ]
+}
+  top_df <- head(P, 20)
+  library(ggplot2)
+  plot <- ggplot(top_df, aes(x = reorder(pathways, stat.mean), y = stat.mean)) +
+    geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+   labs(title = paste0(ident_2, "_vs_", ident_1, " for Pericyte_Smc"), x = "Pathways", y = "Mean Enrichment Score (stat.mean)") +
+  theme_minimal()
+  png(paste0("./PATHWAYS/", ident_2, "_vs_", ident_1, " for Pericyte_Smc.png"), width= 7, height = 5, units = "in", res = 300)
+  plot
+  print(plot)
+  dev.off()
+}
+```
+
+
+
+```{r}
+
+library(ggplot2)
+
+p <- ggplot(top_df, aes(x = reorder(pathways, stat.mean), y = stat.mean)) +
+    geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+   labs(title = paste0(ident_2, "_vs_", ident_1, " for Whole Lung"), x = "Pathways", y = "Mean Enrichment Score (stat.mean)") +
+  theme_minimal()
+
+png(paste0("./PATHWAYS/", ident_2, "_vs_", ident_1, " for Whole Lung.png"), width = 7, height = 5, units = "in", res = 300)
+p
+dev.off()
+
+```
+
+
+
+
+
+
+#from gage results u can continue
+```{r, fig.height=4, fig.width=10}
+
+
+ident_pairs <- list(
+c("WT Female", "WT_Male"),
+c("ScAnemia Female", "WT Female"),
+c("ScAnemia Male", "WT_Male"),
+c("ScAnemia Female", "ScAnemia Male"),
+c("WT_Male", "WT Female"),
+c("WT Female", "ScAnemia Female"),
+c("WT_Male", "ScAnemia Male"),
+c("ScAnemia Male", "ScAnemia Female")
+)
+        # Loop through each pair and find markers
+for (pair in ident_pairs) {
+  # Extract ident.1 and ident.2 from the pair
+  ident_1 <- pair[1]
+  ident_2 <- pair[2]
+  library(Seurat)
+  degs <- FindMarkers(sickle_cell, ident.1 = ident_2, ident.2 = ident_1, assay = "RNA", group.by = "group")
+  significant_degs <- degs[degs$p_val_adj < 0.05 & (degs$pct.1 > 0.1 | degs$pct.2 > 0.1),  ]
+  library(org.Mm.eg.db)
+  entrez_ids <- mapIds(org.Mm.eg.db,
+                     keys = rownames(significant_degs),
+                     column = "ENTREZID",
+                     keytype = "SYMBOL",
+                     multiVals = "first")
+  names(entrez_ids) <- rownames(significant_degs)
+  entrez_valid <- entrez_ids[!is.na(entrez_ids)]
+  significant_degs <- significant_degs[names(entrez_valid), ]
+  exprs_degs <- matrix(significant_degs$avg_log2FC, ncol = 1)
+  rownames(exprs_degs) <- entrez_valid
+  
+  library(ReactomePA)
+  library(enrichplot)
+  pathway_results <- enrichPathway(gene = rownames(exprs_degs), organism = "mouse", pvalueCutoff = 0.05)
+  #ADDING LOG VALUES TO PATHWAY ANALYSIS
+  pathway_results@result$logFC <- sapply(pathway_results@result$geneID, function(genes) {
+  # Split geneID into individual Entrez IDs
+  entrez_ids <- unlist(strsplit(genes, "/"))
+  exprs_degs <- as.data.frame(exprs_degs)
+  # Extract logFC values from exprs (column V1)
+  logFC_values <- exprs_degs[entrez_ids, "V1"]
+  
+  # Compute the mean logFC for the pathway
+  mean(logFC_values, na.rm = TRUE)
+})
+  pathway_results <- pairwise_termsim(pathway_results)
+  #barplot(pathway_results, showCategory = 20)
+  png(paste0("./PATHWAYS/", ident_2, "_vs_", ident_1, "_dotplot_REACTOME.png"), width = 10, height = 15, res = 300, units = "in" )
+  p <- dotplot(pathway_results, showCategory = 20)
+  print(p)
+  dev.off()
+  png(paste0("./PATHWAYS/", ident_2, "_vs_", ident_1, "_emapplot_REACTOME.png"), width = 10, height = 15, res = 300, units = "in" )
+  p <- emapplot(pathway_results, showCategory = 20)
+  print(p)
+  dev.off()
+  #emapplot(pathway_results, showCategory = 20, color = "logFC")  # Use logFC for node colors
+
+}
+```
+
+
+
+
+
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)  # Mouse-specific annotation database
+
+
+# Perform GO enrichment analysis
+go_results <- enrichGO(
+  gene          = rownames(exprs_degs),  # Use Entrez IDs as input genes
+  OrgDb         = org.Mm.eg.db,          # Organism database for mouse
+  keyType       = "ENTREZID",            # Specify the type of gene ID
+  ont           = "BP",                  # Ontology type: BP, CC, or MF
+  pAdjustMethod = "BH",                  # Adjust p-values using Benjamini-Hochberg
+  pvalueCutoff  = 0.05,                  # Significance threshold for p-values
+  qvalueCutoff  = 0.2,                   # Significance threshold for q-values
+  readable      = TRUE                   # Converts Entrez IDs to gene symbols
+)
+
+# View the enrichment results
+head(as.data.frame(go_results))
+
+barplot(go_results, showCategory = 10, title = "Top 10 Enriched GO Biological Processes")
+
+go_results@result
+
+
+
+```
+
+
+
+
+
+
+
+                       
+ # ENRICH RESULT
+ 
+```{r}
+# Assuming your DEG list is called "deg_genes" and your reference list is called "reference_genes"
+library(clusterProfiler)
+
+# Example using enrichGO function
+enrich_result <- enrichGO(
+    gene          = mouse_data$X,        # Your DEG list
+    OrgDb         = org.Mm.eg.db,     # Organism database (e.g., human genes)
+    keyType       = "SYMBOL",         # Type of gene identifier (e.g., SYMBOL, ENSEMBL)
+    ont           = "BP",             # Ontology type: BP, MF, or CC
+    pAdjustMethod = "BH",             # p-value adjustment method
+    universe      = rownames(sickle_cell),  # Custom reference list
+    pvalueCutoff  = 0.05,
+    qvalueCutoff  = 0.2
+)
+# View the enrichment results
+head(as.data.frame(enrich_result))
+
+barplot(enrich_result, showCategory = 10, title = "Top 10 Enriched GO Biological Processes")
+
+```                      
+                       
+    
+
+#Gaining ENRICHGO RESULTS AUTOMATICALLY PER PAIR
+
+```{r}
+
+ident_pairs <- list(
+c("WT Female", "WT_Male"),
+c("ScAnemia Female", "WT Female"),
+c("ScAnemia Male", "WT_Male"),
+c("ScAnemia Female", "ScAnemia Male"),
+c("WT_Male", "WT Female"),
+c("WT Female", "ScAnemia Female"),
+c("WT_Male", "ScAnemia Male"),
+c("ScAnemia Male", "ScAnemia Female")
+)
+        # Loop through each pair and find markers
+for (pair in ident_pairs) {
+  # Extract ident.1 and ident.2 from the pair
+  ident_1 <- pair[1]
+  ident_2 <- pair[2]
+  library(Seurat)
+  degs <- FindMarkers(sickle_cell, ident.1 = ident_2, ident.2 = ident_1, assay = "RNA", group.by = "group")
+  significant_degs <- degs[degs$p_val_adj < 0.05 & (degs$pct.1 > 0.1 | degs$pct.2 > 0.1),  ]
+  library(org.Mm.eg.db)
+  entrez_ids <- mapIds(org.Mm.eg.db,
+                     keys = rownames(significant_degs),
+                     column = "ENTREZID",
+                     keytype = "SYMBOL",
+                     multiVals = "first")
+  names(entrez_ids) <- rownames(significant_degs)
+  entrez_valid <- entrez_ids[!is.na(entrez_ids)]
+  significant_degs <- significant_degs[names(entrez_valid), ]
+  exprs_degs <- matrix(significant_degs$avg_log2FC, ncol = 1)
+  rownames(exprs_degs) <- entrez_valid
+  
+  library(clusterProfiler)
+  library(org.Mm.eg.db)  # Mouse-specific annotation database
+  # Perform GO enrichment analysis
+  go_results <- enrichGO(
+  gene          = rownames(exprs_degs),  # Use Entrez IDs as input genes
+  OrgDb         = org.Mm.eg.db,          # Organism database for mouse
+  keyType       = "ENTREZID",            # Specify the type of gene ID
+  ont           = "BP",                  # Ontology type: BP, CC, or MF
+  pAdjustMethod = "BH",                  # Adjust p-values using Benjamini-Hochberg
+  pvalueCutoff  = 0.05,                  # Significance threshold for p-values
+  qvalueCutoff  = 0.2,                   # Significance threshold for q-values
+  readable      = TRUE                   # Converts Entrez IDs to gene symbols
+)
+  write.csv(go_results@result, paste0("./PATHWAYS/", ident_2, "_vs_", ident_1, " enrichGo_results.csv"))
+}
+   
+```
+#KEGG RESULTS FOR PATHVIEW!!!
+
+```{r}
+kegg_result <- enrichKEGG(gene = rownames(exprs_degs),
+                          organism = 'mmu',  # 'hsa' for Homo sapiens (change if necessary)
+                          pvalueCutoff = 0.05)
+head(kegg_result)
+
+kegg_result_df <- as.data.frame(kegg_result)
+#significant_results <- kegg_result_df[kegg_result_df$qvalue < 0.05, ]
+
+
+#mmu05171
+
+```
+
+
+
+
+#AUTOMATIC KEGG RESULTS DF AND SAVING
+
+```{r}
+
+ident_pairs <- list(
+c("WT Female", "WT_Male"),
+c("ScAnemia Female", "WT Female"),
+c("ScAnemia Male", "WT_Male"),
+c("ScAnemia Female", "ScAnemia Male"),
+c("WT_Male", "WT Female"),
+c("WT Female", "ScAnemia Female"),
+c("WT_Male", "ScAnemia Male"),
+c("ScAnemia Male", "ScAnemia Female")
+)
+        # Loop through each pair and find markers
+for (pair in ident_pairs) {
+  # Extract ident.1 and ident.2 from the pair
+  ident_1 <- pair[1]
+  ident_2 <- pair[2]
+  library(Seurat)
+  degs <- FindMarkers(sickle_cell, ident.1 = ident_2, ident.2 = ident_1, assay = "RNA", group.by = "group")
+  significant_degs <- degs[degs$p_val_adj < 0.05 & (degs$pct.1 > 0.1 | degs$pct.2 > 0.1),  ]
+  library(org.Mm.eg.db)
+  entrez_ids <- mapIds(org.Mm.eg.db,
+                     keys = rownames(significant_degs),
+                     column = "ENTREZID",
+                     keytype = "SYMBOL",
+                     multiVals = "first")
+  names(entrez_ids) <- rownames(significant_degs)
+  entrez_valid <- entrez_ids[!is.na(entrez_ids)]
+  significant_degs <- significant_degs[names(entrez_valid), ]
+  exprs_degs <- matrix(significant_degs$avg_log2FC, ncol = 1)
+  rownames(exprs_degs) <- entrez_valid
+  kegg_result <- enrichKEGG(gene = rownames(exprs_degs),
+                          organism = 'mmu',  # 'hsa' for Homo sapiens (change if necessary)
+                          pvalueCutoff = 0.05)
+  kegg_result_df <- as.data.frame(kegg_result)
+  #significant_results <- kegg_result_df[kegg_result_df$qvalue < 0.05, ]
+  write.csv(go_results@result, paste0("./PATHWAYS/", ident_2, "_vs_", ident_1, " enrichKEGG_results.csv"))
+}
+   
+```
+
+
+#PATHVIEW
+
+```{r}
+library(pathview)
+pv.out <- pathview(gene.data = exprs_degs,
+                   pathway.id = "mmu05171",
+                   species = "mmu",
+                   out.suffix = "WT Female_vs_WT_Male",
+                   kegg.native = TRUE)
+
+
+pv.out <- pathview(gene.data = exprs_degs,
+                   pathway.id = "mmu05171",
+                   species = "mmu",
+                   out.suffix = "WT Female_vs_WT_Male",
+                   kegg.native = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+#KEGG PATHWAYS
+
+```{r}
+
+data("kegg.sets.mm")
+#data("sigmet.idx.rn")
+#kegg.sets.rn = kegg.sets.rn[sigmet.idx.rn]
+kegg.sets.mm = kegg.sets.mm
+
+```
+
+
+
+
+
+# HOW TO CHECK THE DATA IN SPECIFIC PACKAGE AND CALL IT
+
+```{r}
+data()
+
+data(package = "gage")
+
+data(package = .packages(all.available = TRUE))
+
+data("kegg_category", package = "clusterProfiler")
+
+
+Data sets in package ‘clusterProfiler’:
+
+DE_GSE8057                    Datasets gcSample contains a sample of gene clusters.
+gcSample                      Datasets gcSample contains a sample of gene clusters.
+kegg_category                 Datasets gcSample contains a sample of gene clusters.
+kegg_species                  Datasets gcSample contains a sample of gene clusters.
+
+length(unique(kegg_category$name))
+
+rm(list = ls())
+       
+```
+
+
+
+```{r}
+library(KEGGREST)
+# List all mouse pathways
+mouse_pathways <- keggList("pathway", "mmu")
+# Search for inflammation-related pathways
+grep("inflammation|immune|cytokine|toll-like", mouse_pathways, value = TRUE)
+grep("inflammation|toll|cytokine", mouse_pathways, value = TRUE)
+
+df <- as.data.frame(mouse_pathways)
+
+
+df$mouse_pathways <- sub(" - Mus musculus \\(house mouse\\)", "", df$mouse_pathways)
+
+write.csv(df, "Keggrest_updated_pathways_mmu.csv")
+
+
+
+```
+
+
+
+
+
+```{r}
+library(readxl)
+library(AnnotationDbi)
+library(org.Mm.eg.db)
+
+# Add Entrez IDs to the original data
+mouse_data$ENTREZID <- entrez_ids
+
+# Extract fold changes and name them with Entrez IDs
+foldchanges <- mouse_data$avg_log2FC
+names(foldchanges) <- mouse_data$ENTREZID
+
+
+keggres = gage(exprs = foldchanges, gsets = kegg.sets.mm, same.dir = FALSE)
+
+
+
+# Check how many genes were mapped successfully
+summary(is.na(mouse_data$ENTREZID))
+#fold change value
+summary(foldchanges)
+# Count how many genes are used in pathway analysis
+length(intersect(names(foldchanges), unlist(kegg.sets.mm)))
+
+View(keggres$less)
+
+write.csv(keggres$greater, "./gcapb_kegg_true.csv")
+
+
+
+#EXTRACT GENES
+
+
+# Check the gene set associated with the first pathway (Metabolic pathways, mo01100)
+genes_in_metabolic_pathway <- kegg.sets.mm[["rno01100 Metabolic pathways"]]
+metabolic_gcapb <- intersect(genes_in_metabolic_pathway, gcapb$ENTREZID)
+class(metabolic_gcapb)
+metabolic_gcapb <- as.data.frame(metabolic_gcapb)
+
+metabolic_gcapb$gene_symbols <- NA
+metabolic_gcapb$log_fold <- NA
+
+matching_indices <- match(metabolic_gcapb$metabolic_gcapb, gcapb$ENTREZID)
+
+metabolic_gcapb$log_fold <-  gcapb$gCapB.avg_log2FC[matching_indices]
+
+# View the genes
+print(genes_in_metabolic_pathway)
+
+
+write.csv(metabolic_gcapb, "./metabolic_pathway_genes.csv")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#UMAPs
+
+```{r, fig.height=19, fig.width=19}
+
+#PERI SMOOTH
+png("Pericyte_SMC_per_group.png", width = 19, height = 5, units = "in", res = 300)
+DimPlot(ScAnemia_perismc, group.by = "Parse_StromAnn2", split.by = "group", pt.size = 2) + ggtitle("Pericytes and Smooth Muscle Cells")
+dev.off()
+
+png("Pericyte_SMC_all_together.png", width = 7, height = 5, units = "in", res = 300)
+DimPlot(ScAnemia_perismc, group.by = "Parse_StromAnn2",  pt.size = 2, label = T) + NoLegend() + ggtitle("Pericytes and Smooth Muscle Cells")
+dev.off()
+
+
+DimPlot(ScAnemia_perismc, group.by = "Parse_StromAnn2", split.by = "group", pt.size = 2)
+getwd()
+
+
+
+
+png("Endothelial_cells_per_group.png", width = 19, height = 5, units = "in", res = 300)
+DimPlot(Endo_ScAnemia, group.by = "annot1", split.by = "group", pt.size = 1) + ggtitle("Endothelial Cells")
+dev.off()
+
+png("Endothelial_cells_all_groups_together.png", width = 7, height = 5, units = "in", res = 300)
+DimPlot(Endo_ScAnemia, group.by = "annot1",  pt.size = 1, label = T) + NoLegend() + ggtitle("Endothelial Cells")
+dev.off()
+
+
+DimPlot(sickle_cell, group.by = "Parse_StromAnn", split.by = "group", pt.size = 2)
+getwd()
+
+
+library(Seurat)
+DimPlot(sickle_cell, group.by = "Parse_Ann1",  pt.size = 1, label = T) + NoLegend() + ggtitle("Whole Lung")
+
+
+png("Whole_lung_all_groups_together.png", width = 13, height = 15, units = "in", res = 300)
+DimPlot(sickle_cell, group.by = "Parse_Ann1",  pt.size = 1, label = T, repel = T) + NoLegend() + ggtitle("Whole_Lung")
+dev.off()
+
+
+
+png("Whole_lung_per_group.png", width = 30, height = 15, units = "in", res = 300)
+DimPlot(sickle_cell, group.by = "Parse_Ann1",  pt.size = 1, label = T, repel = T, split.by = "group") + NoLegend() + ggtitle("Whole_Lung")
+dev.off()
+
+
+sickle_cell$Parse_Ann1 <-sickle_cell$Parse_Ann 
+sickle_cell$Parse_Ann1[sickle_cell$Parse_Ann1 %in% "AT1"] <- "Mesothelial cells"
+sickle_cell$Parse_Ann1[sickle_cell$Parse_Ann1 %in% c("gCapB", "gCapA", "gCapC", "gCapD", "gCapE")] <- "gCaps"
+sickle_cell$Parse_Ann1[sickle_cell$Parse_Ann1 %in% c("Vascular Smc", "Airway Smc")] <- "Smooth muscle cells"
+sickle_cell$Parse_Ann1[sickle_cell$Parse_Ann1 %in% "Aerocyte II"] <- "gCaps"
+sickle_cell$Parse_Ann1[sub] <- "Aerocyte I"
+sickle_cell$Parse_Ann1[sickle_cell$Parse_Ann1 %in% "Aerocyte I"] <- "aCaps"
+sickle_cell$Parse_Ann2 <-sickle_cell$Parse_Ann1
+
+sickle_cell$Parse_Ann1[sickle_cell$Parse_Ann1 %in% c("Vascular Smc", "Airway Smc")] <- "Smooth muscle cells"
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann1 %in% c("Peribronchial fibroblasts", "Alveolar fibroblasts", "Adventitial fibroblasts", "Myofibroblasts")] <- "Fibroblasts"
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann1 %in% c("Monocyte-derived Macrophages", "Interstitial Macrophages")] <- "Macrophages"
+
+sickle_cell$Parse_Ann2 <- gsub(" proliferating$", "", sickle_cell$Parse_Ann2)
+# Remove "Prolif. " from the beginning of cell names in the Parse_Ann2 column
+sickle_cell$Parse_Ann2 <- gsub("^Prolif\\. ", "", sickle_cell$Parse_Ann2)
+
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann2 %in% c("Act. Alveolar MΦ", "Alveolar MΦ")] <- "Alveolar Macrophages"
+
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann1 %in% c("Cd8+ NK cells", "Immature Cd8+ NK cells")] <- "NK cells"
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann2 %in% c("DC1", "DC2", "Plasmacytoid DCs")] <- "Dendritic cells"
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann1 %in% c("aCaps", "gCaps", "PAECs", "PVECs", "Lymphatic EC")] <- "Endothelial cells"
+
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann2 %in% c("Th1 cells", "Th17 cells", "CD8+ T Cells", "Helper T Cells", "Tregs")] <- "T cells"
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann1 %in% c("AT1")] <- "Alveolar type I cell"
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann1 %in% c("AT2")] <- "Alveolar type II cell"
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann1 %in% c("Transitional Pericytes")] <- "Smooth muscle cells"
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann2 %in% c("Brush cells")] <- "Alveolar Macrophages"
+sickle_cell$Parse_Ann2[sickle_cell$seurat_clusters %in% 6] <- "Alveolar Macrophages"
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann2 %in% c("Mast cells")] <- NA
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann2 %in% c("Plasma cells")] <- NA
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann2 %in% c("Macrophages")] <- "Interstititonal Macrophages"
+sickle_cell$Parse_Ann2[sickle_cell$Parse_Ann2 %in% c("Interstititonal Macrophages")] <- "Interstitial Macrophages"
+
+
+DimPlot(sickle_cell, group.by = "Parse_Ann2",  pt.size = 1, label = T) + NoLegend() + ggtitle("Whole Lung")
+
+
+sub <- subset(sickle_cell, umap_2 < -7 & umap_1 > 8)
+sub <- colnames(sub)
+DimPlot(sub)
+table(sickle_cell$Parse_Ann2)
+
+
+#Alveolar Macrophage Cd68, Mertk, Itgax(cd11c), siglec1
+#interstitial Macrophage Adgr1, Itgam, (mrc1), Cd163, Cd14
+Macrophages <- Cd68, Mertk, Adgre1(F4/80)
+Macrophages <- c("Cd68", "Mertk", "Adgre1", "Marco", "Itgax", "Itgam", "Siglec1", "RT1-Da", "Mrc1", "Cd163", "Ccr2")   #Adgre1(F4/80) #RT1-Da-HLA_DRA
+
+FeaturePlot(sickle_cell, Neutrophil_markers)
+Neutrophil_markers <- c("S100a9", "S100a8", "Cxcr2", "Prtn3", "Sell", "Elane", "Il1b", "Stfa2", "Stfa2l1")
+
+
+SCT_ScAnemia$Parse_Ann2 <- NA
+
+SCT_ScAnemia$Parse_Ann2 <- sickle_cell$Parse_Ann2
+
+
+DimPlot(sickle_cell, label = T)
+
+DimPlot(sickle_cell, group.by = "Parse_Ann2",  pt.size = 1, label = T, repel = T) + NoLegend() + ggtitle("Whole Lung")
+
+DimPlot(sickle_cell, cells.highlight = colnames(SCT_ScAnemia)[SCT_ScAnemia$Parse_Ann2 %in% "Neutrophils"]) + NoLegend() + ggtitle("Whole Lung")
+
+
+
+DimPlot(sickle_cell, group.by = "Parse_Ann2",  pt.size = 1, label = T, repel = T) + NoLegend() + ggtitle("Whole Lung")
+FeaturePlot(sickle_cell, "Mki67")
+```
+
+
+# MAKING TABLE FOR NEW
+
+```{r}
+# MAKING THE TABLE
+
+sickle_cell$group1 <- sickle_cell$group1
+table(sickle_cell$group1)
+df <- as.data.frame(table(sickle_cell$Parse_Ann2))
+
+df1 <- as.data.frame(table(sickle_cell$Parse_Ann2[sickle_cell$group1 == "WT_Male"]))
+df2 <- as.data.frame(table(sickle_cell$Parse_Ann2[sickle_cell$group1 == "WT Female"]))
+df3 <-as.data.frame(table(sickle_cell$Parse_Ann2[sickle_cell$group1 == "ScAnemia Male"]))
+df4 <-as.data.frame(table(sickle_cell$Parse_Ann2[sickle_cell$group1 == "ScAnemia Female"]))
+
+rownames(df) <- df$Var1
+
+rownames(df1) <- df1$Var1
+rownames(df2) <- df2$Var1
+rownames(df3) <- df3$Var1
+rownames(df4) <- df4$Var1
+
+df$Var1 <- NULL
+df1$Var1 <- NULL
+df2$Var1 <- NULL
+df3$Var1 <- NULL
+df4$Var1 <- NULL
+
+colnames(df)[1] <- "All_groups"
+colnames(df1)[1] <- "WT Normoxia"
+colnames(df2)[1] <- "WT Hypoxia"
+colnames(df3)[1] <- "ScAnemia Normoxia"
+colnames(df4)[1] <- "ScAnemia Hypoxia"
+
+
+
+
+
+# Match rownames of df to rownames of df1
+matched_indices <- match(rownames(df), rownames(df1))
+df$WT_Male<- NA
+df$WT_Male<- 0
+df$WT_Male[!is.na(matched_indices)] <- df1[matched_indices[!is.na(matched_indices)], "WT Normoxia"]
+
+matched_indices <- match(rownames(df), rownames(df2))
+df$WT Female<- NA
+df$WT Female<- 0
+df$WT Female[!is.na(matched_indices)] <- df2[matched_indices[!is.na(matched_indices)], "WT Hypoxia"]
+
+matched_indices <- match(rownames(df), rownames(df3))
+df$ScAnemia Male<- NA
+df$ScAnemia Male<- 0
+df$ScAnemia Male[!is.na(matched_indices)] <- df3[matched_indices[!is.na(matched_indices)], "ScAnemia Normoxia"]
+
+matched_indices <- match(rownames(df), rownames(df4))
+df$ScAnemia Female<- NA
+df$ScAnemia Female<- 0
+df$ScAnemia Female[!is.na(matched_indices)] <- df4[matched_indices[!is.na(matched_indices)], "ScAnemia Hypoxia"]
+
+df <- df[!rownames(df) %in% "AT1", ]
+df <- df[!rownames(df) %in% "Basal Epithelial", ]
+
+# ILLUSTRATING DF TABLE
+
+# Load necessary libraries
+library(ggplot2)
+library(tidyr)
+
+df$Cell_Type <- rownames(df)
+
+# Convert data frame to long format
+df_long <- pivot_longer(df, cols = c("WT_Male", "WT Female", "ScAnemia Male", "ScAnemia Female"),
+                        names_to = "Condition", values_to = "Count")
+
+
+library(gridExtra)
+library(ggplot2) 
+# Open a PNG device to save the output as a high-resolution image (300 dpi)
+png("Parse_Ann2_percentages.png", width = 15, height = 19, units = "in", res = 300) #7
+
+# Arrange and save all plots in a grid with 3 columns
+p
+
+# Close the graphics device
+dev.off()
+
+
+
+# Create grouped bar plot
+p <- ggplot(df_long, aes(x = Cell_Type, y = Count, fill = Condition)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = Count), 
+          position = position_stack(vjust = 0.5), # Position the text labels in the middle of each bar section
+          size = 3, color = "black") +
+  labs(x = "Cell Type", y = "Count", title = "Comparison of Counts by Condition for Each Cell Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1") #+
+  #scale_y_continuous(limits = c(0, 2500))
+
+
+table(Endo_ScAnemia$orig.ident)
+table(sickle_cell$orig.ident)
+
+table(df$WT_Male)
+
+#PERCENTAGES OF DF
+df$WT_Male_per <- NA
+df$WT_Male_per <- (df$WT_Male * 100) / 9211
+
+
+df$WT Female_per <- NA
+df$WT Female_per <- (df$WT Female * 100) / 8603
+
+df$ScAnemia Male_per <- NA
+df$ScAnemia Male_per <- (df$ScAnemia Male * 100) / 7427
+
+df$ScAnemia Female_per <- NA
+df$ScAnemia Female_per <- (df$ScAnemia Female * 100) / 7674
+
+write.csv(df, "Parse_Ann2_df.csv")
+
+
+#df$total <- NULL
+#df$total[df_long$Condition == "WT_Male"] <- 9211
+#df$total[df_long$Condition == "WT Female"] <- 8604
+#df$total[df_long$Condition == "ScAnemia Male"] <- 7427
+#df$total[df_long$Condition == "ScAnemia Female"] <- 7674
+
+
+
+df_long$total <- NA
+df_long$total[df_long$Condition == "WT_Male"] <- 9211
+df_long$total[df_long$Condition == "WT Female"] <- 8603
+df_long$total[df_long$Condition == "ScAnemia Male"] <- 7427
+df_long$total[df_long$Condition == "ScAnemia Female"] <- 7674
+
+
+df_long$count_percent <- NA
+df_long$count_percent <- (df_long$Count * 100) / df_long$total
+
+
+table(sickle_cell$orig.ident)
+
+sum(df$ScAnemia Female)
+
+# Create grouped bar plot
+p <- ggplot(df_long, aes(x = Cell_Type, y = count_percent, fill = Condition)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = sprintf("%.1f", count_percent)), 
+          position = position_stack(vjust = 0.5), # Position the text labels in the middle of each bar section
+          size = 3, color = "black") +
+  labs(x = "Cell Type", y = "count_percentage", title = "Comparison of Percentages by Condition for Whole Lung Cell Types") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+getwd()
+
+yes <- rownames(sickle_cell)[grep("Stat", rownames(sickle_cell))]
+class(yes)
+
+
+for(i in yes){
+  p <- DotPlot(sickle_cell, i, group.by = "group", scale.min = 0) + coord_flip() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  print(p)
+}
+
+for(i in genes){
+  p <- DotPlot(sickle_cell, i, group.by = "group", scale.min = 0) + coord_flip() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  print(p)
+}
+
+colSums(df[, sapply(df, is.numeric)])
+```
+
+#MAKING TABLE FOR EC SUBTYPES
+
+```{r}
+
+# MAKING THE TABLE
+
+Endo_ScAnemia$group1 <- sickle_cell$group1
+table(Endo_ScAnemia$group1)
+df <- as.data.frame(table(Endo_ScAnemia$annot1))
+
+df1 <- as.data.frame(table(Endo_ScAnemia$annot1[Endo_ScAnemia$group1 == "WT_Male"]))
+df2 <- as.data.frame(table(Endo_ScAnemia$annot1[Endo_ScAnemia$group1 == "WT Female"]))
+df3 <-as.data.frame(table(Endo_ScAnemia$annot1[Endo_ScAnemia$group1 == "ScAnemia Male"]))
+df4 <-as.data.frame(table(Endo_ScAnemia$annot1[Endo_ScAnemia$group1 == "ScAnemia Female"]))
+
+rownames(df) <- df$Var1
+
+rownames(df1) <- df1$Var1
+rownames(df2) <- df2$Var1
+rownames(df3) <- df3$Var1
+rownames(df4) <- df4$Var1
+
+df$Var1 <- NULL
+df1$Var1 <- NULL
+df2$Var1 <- NULL
+df3$Var1 <- NULL
+df4$Var1 <- NULL
+
+colnames(df)[1] <- "All_groups"
+colnames(df1)[1] <- "WT Normoxia"
+colnames(df2)[1] <- "WT Hypoxia"
+colnames(df3)[1] <- "ScAnemia Normoxia"
+colnames(df4)[1] <- "ScAnemia Hypoxia"
+
+
+
+
+
+# Match rownames of df to rownames of df1
+matched_indices <- match(rownames(df), rownames(df1))
+df$WT_Male<- NA
+df$WT_Male<- 0
+df$WT_Male[!is.na(matched_indices)] <- df1[matched_indices[!is.na(matched_indices)], "WT Normoxia"]
+
+matched_indices <- match(rownames(df), rownames(df2))
+df$WT Female<- NA
+df$WT Female<- 0
+df$WT Female[!is.na(matched_indices)] <- df2[matched_indices[!is.na(matched_indices)], "WT Hypoxia"]
+
+matched_indices <- match(rownames(df), rownames(df3))
+df$ScAnemia Male<- NA
+df$ScAnemia Male<- 0
+df$ScAnemia Male[!is.na(matched_indices)] <- df3[matched_indices[!is.na(matched_indices)], "ScAnemia Normoxia"]
+
+matched_indices <- match(rownames(df), rownames(df4))
+df$ScAnemia Female<- NA
+df$ScAnemia Female<- 0
+df$ScAnemia Female[!is.na(matched_indices)] <- df4[matched_indices[!is.na(matched_indices)], "ScAnemia Hypoxia"]
+
+
+# ILLUSTRATING DF TABLE
+
+# Load necessary libraries
+library(ggplot2)
+library(tidyr)
+
+df$Cell_Type <- rownames(df)
+
+# Convert data frame to long format
+df_long <- pivot_longer(df, cols = c("WT_Male", "WT Female", "ScAnemia Male", "ScAnemia Female"),
+                        names_to = "Condition", values_to = "Count")
+
+
+
+colSums(df[, sapply(df, is.numeric)])
+
+
+# Create grouped bar plot
+p <- ggplot(df_long, aes(x = Cell_Type, y = Count, fill = Condition)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = Count), 
+          position = position_stack(vjust = 0.5), # Position the text labels in the middle of each bar section
+          size = 3, color = "black") +
+  labs(x = "Cell Type", y = "Count", title = "Comparison of Counts by Condition for Each EC Subpopulations") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1") #+
+  #scale_y_continuous(limits = c(0, 2500))
+
+
+table(Endo_ScAnemia$orig.ident)
+table(sickle_cell$orig.ident)
+
+table(df$WT_Male)
+
+#PERCENTAGES OF DF
+df$WT_Male_per <- NA
+df$WT_Male_per <- (df$WT_Male * 100) / 2730
+
+
+df$WT Female_per <- NA
+df$WT Female_per <- (df$WT Female * 100) / 1673
+
+df$ScAnemia Male_per <- NA
+df$ScAnemia Male_per <- (df$ScAnemia Male * 100) / 2306
+
+df$ScAnemia Female_per <- NA
+df$ScAnemia Female_per <- (df$ScAnemia Female * 100) / 2577
+
+write.csv(df, "Endothelial_df.csv")
+
+
+df_long$total <- NA
+df_long$total[df_long$Condition == "WT_Male"] <- 2730
+df_long$total[df_long$Condition == "WT Female"] <- 1673
+df_long$total[df_long$Condition == "ScAnemia Male"] <- 2306
+df_long$total[df_long$Condition == "ScAnemia Female"] <- 2577
+
+
+df_long$count_percent <- NA
+df_long$count_percent <- (df_long$Count * 100) / df_long$total
+
+
+
+# Create grouped bar plot
+p <- ggplot(df_long, aes(x = Cell_Type, y = count_percent, fill = Condition)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = sprintf("%.1f", count_percent)), 
+          position = position_stack(vjust = 0.5), # Position the text labels in the middle of each bar section
+          size = 3, color = "black") +
+  labs(x = "Cell Type", y = "count_percent", title = "Comparison of count_percentages by Condition for Each EC Subpopulations") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+
+
+
+library(gridExtra)
+library(ggplot2) 
+# Open a PNG device to save the output as a high-resolution image (300 dpi)
+png("Endothelial_subpopulations_counts.png", width = 10, height = 15, units = "in", res = 300) #7
+
+# Arrange and save all plots in a grid with 3 columns
+p
+
+# Close the graphics device
+dev.off()
+```
+
+
+#----------------------------------------------------------------------
+#----------------------------------------------------------------------
+#----------------------------------------------------------------------
+#----------------------------------------------------------------------
+#----------------------------------------------------------------------
+#Gaining ENRICHGO RESULTS PRE SUBGROUPS of EC cells
+
+```{r}
+Ec_subs <- table(Endo_ScAnemia$annot1)
+Ec_subs <- names(Ec_subs)
+
+for (i in Ec_subs){
+
+  subcluster <- subset(Endo_ScAnemia, annot1 == i)
+  
+ident_pairs <- list(
+c("WT Female", "WT_Male"),
+c("ScAnemia Female", "WT Female"),
+c("ScAnemia Male", "WT_Male"),
+c("ScAnemia Female", "ScAnemia Male"),
+c("WT_Male", "WT Female"),
+c("WT Female", "ScAnemia Female"),
+c("WT_Male", "ScAnemia Male"),
+c("ScAnemia Male", "ScAnemia Female")
+)
+        # Loop through each pair and find markers
+for (pair in ident_pairs) {
+  # Extract ident.1 and ident.2 from the pair
+  ident_1 <- pair[1]
+  ident_2 <- pair[2]
+  library(Seurat)
+  degs <- FindMarkers(subcluster, ident.1 = ident_2, ident.2 = ident_1, assay = "RNA", group.by = "group")
+  significant_degs <- degs[degs$p_val_adj < 0.05 & (degs$pct.1 > 0.1 | degs$pct.2 > 0.1),  ]
+  library(org.Mm.eg.db)
+  entrez_ids <- mapIds(org.Mm.eg.db,
+                     keys = rownames(significant_degs),
+                     column = "ENTREZID",
+                     keytype = "SYMBOL",
+                     multiVals = "first")
+  names(entrez_ids) <- rownames(significant_degs)
+  entrez_valid <- entrez_ids[!is.na(entrez_ids)]
+  significant_degs <- significant_degs[names(entrez_valid), ]
+  exprs_degs <- matrix(significant_degs$avg_log2FC, ncol = 1)
+  rownames(exprs_degs) <- entrez_valid
+  
+  library(clusterProfiler)
+  library(org.Mm.eg.db)  # Mouse-specific annotation database
+  # Perform GO enrichment analysis
+  go_results <- enrichGO(
+  gene          = rownames(exprs_degs),  # Use Entrez IDs as input genes
+  OrgDb         = org.Mm.eg.db,          # Organism database for mouse
+  keyType       = "ENTREZID",            # Specify the type of gene ID
+  ont           = "BP",                  # Ontology type: BP, CC, or MF
+  pAdjustMethod = "BH",                  # Adjust p-values using Benjamini-Hochberg
+  pvalueCutoff  = 0.05,                  # Significance threshold for p-values
+  qvalueCutoff  = 0.2,                   # Significance threshold for q-values
+  readable      = TRUE                   # Converts Entrez IDs to gene symbols
+)
+  write.csv(go_results@result, paste0("./PATHWAYS_new/", i, "_", ident_2, "_vs_", ident_1, " enrichGo_results.csv"))
+}
+}
+
+
+   
+```
+
+
+#Gaining ENRICHGO RESULTS of SMC/pericytes and fibroblasts
+
+```{r}
+ScAnemia_subs <- table(sickle_cell$Parse_Ann2)
+ScAnemia_subs <- names(ScAnemia_subs)
+ScAnemia_subs <-ScAnemia_subs[c(10,17,18)] 
+
+
+for (i in ScAnemia_subs){
+
+  subcluster <- subset(sickle_cell, Parse_Ann2 == i)
+  
+ident_pairs <- list(
+c("WT Female", "WT_Male"),
+c("ScAnemia Female", "WT Female"),
+c("ScAnemia Male", "WT_Male"),
+c("ScAnemia Female", "ScAnemia Male"),
+c("WT_Male", "WT Female"),
+c("WT Female", "ScAnemia Female"),
+c("WT_Male", "ScAnemia Male"),
+c("ScAnemia Male", "ScAnemia Female")
+)
+        # Loop through each pair and find markers
+for (pair in ident_pairs) {
+  # Extract ident.1 and ident.2 from the pair
+  ident_1 <- pair[1]
+  ident_2 <- pair[2]
+  library(Seurat)
+  degs <- FindMarkers(subcluster, ident.1 = ident_2, ident.2 = ident_1, assay = "RNA", group.by = "group")
+  significant_degs <- degs[degs$p_val_adj < 0.05 & (degs$pct.1 > 0.1 | degs$pct.2 > 0.1),  ]
+  library(org.Mm.eg.db)
+  entrez_ids <- mapIds(org.Mm.eg.db,
+                     keys = rownames(significant_degs),
+                     column = "ENTREZID",
+                     keytype = "SYMBOL",
+                     multiVals = "first")
+  names(entrez_ids) <- rownames(significant_degs)
+  entrez_valid <- entrez_ids[!is.na(entrez_ids)]
+  significant_degs <- significant_degs[names(entrez_valid), ]
+  exprs_degs <- matrix(significant_degs$avg_log2FC, ncol = 1)
+  rownames(exprs_degs) <- entrez_valid
+  
+  library(clusterProfiler)
+  library(org.Mm.eg.db)  # Mouse-specific annotation database
+  # Perform GO enrichment analysis
+  go_results <- enrichGO(
+  gene          = rownames(exprs_degs),  # Use Entrez IDs as input genes
+  OrgDb         = org.Mm.eg.db,          # Organism database for mouse
+  keyType       = "ENTREZID",            # Specify the type of gene ID
+  ont           = "BP",                  # Ontology type: BP, CC, or MF
+  pAdjustMethod = "BH",                  # Adjust p-values using Benjamini-Hochberg
+  pvalueCutoff  = 0.05,                  # Significance threshold for p-values
+  qvalueCutoff  = 0.2,                   # Significance threshold for q-values
+  readable      = TRUE                   # Converts Entrez IDs to gene symbols
+)
+  write.csv(go_results@result, paste0("./PATHWAYS_new/", i, "_", ident_2, "_vs_", ident_1, " enrichGo_results.csv"))
+}
+}
+
+
+   
+```
+
+#REACTOME ANALYSIS for EC cells
+
+
+```{r, fig.height=4, fig.width=10}
+
+Ec_subs <- table(Endo_ScAnemia$annot1)
+Ec_subs <- names(Ec_subs)
+
+for (i in Ec_subs){
+
+  subcluster <- subset(Endo_ScAnemia, annot1 == i)
+  
+  
+ident_pairs <- list(
+c("WT Female", "WT_Male"),
+c("ScAnemia Female", "WT Female"),
+c("ScAnemia Male", "WT_Male"),
+c("ScAnemia Female", "ScAnemia Male"),
+c("WT_Male", "WT Female"),
+c("WT Female", "ScAnemia Female"),
+c("WT_Male", "ScAnemia Male"),
+c("ScAnemia Male", "ScAnemia Female")
+)
+        # Loop through each pair and find markers
+for (pair in ident_pairs) {
+  # Extract ident.1 and ident.2 from the pair
+  ident_1 <- pair[1]
+  ident_2 <- pair[2]
+  library(Seurat)
+  degs <- FindMarkers(subcluster, ident.1 = ident_2, ident.2 = ident_1, assay = "RNA", group.by = "group")
+  significant_degs <- degs[degs$p_val_adj < 0.05 & (degs$pct.1 > 0.1 | degs$pct.2 > 0.1),  ]
+  library(org.Mm.eg.db)
+  entrez_ids <- mapIds(org.Mm.eg.db,
+                     keys = rownames(significant_degs),
+                     column = "ENTREZID",
+                     keytype = "SYMBOL",
+                     multiVals = "first")
+  names(entrez_ids) <- rownames(significant_degs)
+  entrez_valid <- entrez_ids[!is.na(entrez_ids)]
+  significant_degs <- significant_degs[names(entrez_valid), ]
+  exprs_degs <- matrix(significant_degs$avg_log2FC, ncol = 1)
+  rownames(exprs_degs) <- entrez_valid
+  
+  library(ReactomePA)
+  library(enrichplot)
+  pathway_results <- enrichPathway(gene = rownames(exprs_degs), organism = "mouse", pvalueCutoff = 0.05)
+  #ADDING LOG VALUES TO PATHWAY ANALYSIS
+  pathway_results@result$logFC <- sapply(pathway_results@result$geneID, function(genes) {
+  # Split geneID into individual Entrez IDs
+  entrez_ids <- unlist(strsplit(genes, "/"))
+  exprs_degs <- as.data.frame(exprs_degs)
+  # Extract logFC values from exprs (column V1)
+  logFC_values <- exprs_degs[entrez_ids, "V1"]
+  
+  # Compute the mean logFC for the pathway
+  mean(logFC_values, na.rm = TRUE)
+})
+  pathway_results <- pairwise_termsim(pathway_results)
+  #barplot(pathway_results, showCategory = 20)
+  png(paste0("./PATHWAYS_new/reactome", i, "_", ident_2, "_vs_", ident_1, "_dotplot_REACTOME.png"), width = 10, height = 15, res = 300, units = "in" )
+  p <- dotplot(pathway_results, showCategory = 20)
+  print(p)
+  dev.off()
+  png(paste0("./PATHWAYS_new/reactome", i, "_", ident_2, "_vs_", ident_1, "_emapplot_REACTOME.png"), width = 10, height = 15, res = 300, units = "in" )
+  p <- emapplot(pathway_results, showCategory = 20)
+  print(p)
+  dev.off()
+  #emapplot(pathway_results, showCategory = 20, color = "logFC")  # Use logFC for node colors
+
+}
+}
+
+```
+
+
+```{r}
+
+Ec_subs <- table(Endo_ScAnemia$annot1)
+Ec_subs <- names(Ec_subs)
+Ec_subs <- Ec_subs[4]
+
+for (i in Ec_subs){
+
+  subcluster <- subset(Endo_ScAnemia, annot1 == i)
+  
+  
+ident_pairs <- list(
+#c("WT Female", "WT_Male")#,
+#c("ScAnemia Female", "WT Female")#, c("ScAnemia Male", "WT_Male")#, c("ScAnemia Female", "ScAnemia Male")#, c("WT_Male", "ScAnemia Male")#, c("ScAnemia Male", "ScAnemia Female")#, c("WT Female", "ScAnemia Female")#,c("WT_Male", "WT Female")
+)
+        # Loop through each pair and find markers
+for (pair in ident_pairs) {
+  # Extract ident.1 and ident.2 from the pair
+  write.csv(pair, "pair_current.csv")
+  ident_1 <- pair[1]
+  ident_2 <- pair[2]
+  library(Seurat)
+  degs <- FindMarkers(subcluster, ident.1 = ident_2, ident.2 = ident_1, assay = "RNA", group.by = "group")
+  significant_degs <- degs[degs$p_val_adj < 0.05 & (degs$pct.1 > 0.1 | degs$pct.2 > 0.1),  ]
+  library(org.Mm.eg.db)
+  entrez_ids <- mapIds(org.Mm.eg.db,
+                     keys = rownames(significant_degs),
+                     column = "ENTREZID",
+                     keytype = "SYMBOL",
+                     multiVals = "first")
+  names(entrez_ids) <- rownames(significant_degs)
+  entrez_valid <- entrez_ids[!is.na(entrez_ids)]
+  significant_degs <- significant_degs[names(entrez_valid), ]
+  exprs_degs <- matrix(significant_degs$avg_log2FC, ncol = 1)
+  rownames(exprs_degs) <- entrez_valid
+  
+  library(ReactomePA)
+  library(enrichplot)
+  pathway_results <- enrichPathway(gene = rownames(exprs_degs), organism = "mouse", pvalueCutoff = 0.05)
+
+  #ADDING LOG VALUES TO PATHWAY ANALYSIS
+  pathway_results@result$logFC <- sapply(pathway_results@result$geneID, function(genes) {
+  # Split geneID into individual Entrez IDs
+  entrez_ids <- unlist(strsplit(genes, "/"))
+  exprs_degs <- as.data.frame(exprs_degs)
+  # Extract logFC values from exprs (column V1)
+  logFC_values <- exprs_degs[entrez_ids, "V1"]
+  
+  # Compute the mean logFC for the pathway
+  mean(logFC_values, na.rm = TRUE)
+})
+  pathway_results <- pairwise_termsim(pathway_results)
+        # Skip the rest if pairwise_termsim fails to calculate meaningful results
+ 
+  #barplot(pathway_results, showCategory = 20)
+  png(paste0("./PATHWAYS_new/reactome", i, "_", ident_2, "_vs_", ident_1, "_dotplot_REACTOME.png"), width = 10, height = 15, res = 300, units = "in" )
+  p <- dotplot(pathway_results, showCategory = 20)
+  print(p)
+  dev.off()
+  png(paste0("./PATHWAYS_new/reactome", i, "_", ident_2, "_vs_", ident_1, "_emapplot_REACTOME.png"), width = 10, height = 15, res = 300, units = "in" )
+  p <- emapplot(pathway_results, showCategory = 20)
+  print(p)
+  dev.off()
+  #emapplot(pathway_results, showCategory = 20, color = "logFC")  # Use logFC for node colors
+
+}
+}
+
+```
+
+# percyte and smooth REACTOME
+```{r}
+ScAnemia_subs <- table(sickle_cell$Parse_Ann2)
+ScAnemia_subs <- names(ScAnemia_subs)
+ScAnemia_subs <-ScAnemia_subs[c(10,17,18)] 
+ScAnemia_subs <-ScAnemia_subs[2] 
+
+
+for (i in ScAnemia_subs){
+
+  subcluster <- subset(sickle_cell, Parse_Ann2 == i)
+  
+  
+ident_pairs <- list(
+#c("WT Female", "WT_Male"),
+#c("ScAnemia Female", "WT Female"),
+#c("ScAnemia Male", "WT_Male"),
+#c("ScAnemia Female", "ScAnemia Male"),
+#c("WT_Male", "WT Female"),
+#c("WT Female", "ScAnemia Female"),
+c("WT_Male", "ScAnemia Male"),
+c("ScAnemia Male", "ScAnemia Female")
+)
+        # Loop through each pair and find markers
+for (pair in ident_pairs) {
+  # Extract ident.1 and ident.2 from the pair
+  ident_1 <- pair[1]
+  ident_2 <- pair[2]
+  library(Seurat)
+  degs <- FindMarkers(subcluster, ident.1 = ident_2, ident.2 = ident_1, assay = "RNA", group.by = "group")
+  significant_degs <- degs[degs$p_val_adj < 0.05 & (degs$pct.1 > 0.1 | degs$pct.2 > 0.1),  ]
+  library(org.Mm.eg.db)
+  entrez_ids <- mapIds(org.Mm.eg.db,
+                     keys = rownames(significant_degs),
+                     column = "ENTREZID",
+                     keytype = "SYMBOL",
+                     multiVals = "first")
+  names(entrez_ids) <- rownames(significant_degs)
+  entrez_valid <- entrez_ids[!is.na(entrez_ids)]
+  significant_degs <- significant_degs[names(entrez_valid), ]
+  exprs_degs <- matrix(significant_degs$avg_log2FC, ncol = 1)
+  rownames(exprs_degs) <- entrez_valid
+  
+  library(ReactomePA)
+  library(enrichplot)
+  pathway_results <- enrichPathway(gene = rownames(exprs_degs), organism = "mouse", pvalueCutoff = 0.05)
+  #ADDING LOG VALUES TO PATHWAY ANALYSIS
+  pathway_results@result$logFC <- sapply(pathway_results@result$geneID, function(genes) {
+  # Split geneID into individual Entrez IDs
+  entrez_ids <- unlist(strsplit(genes, "/"))
+  exprs_degs <- as.data.frame(exprs_degs)
+  # Extract logFC values from exprs (column V1)
+  logFC_values <- exprs_degs[entrez_ids, "V1"]
+  
+  # Compute the mean logFC for the pathway
+  mean(logFC_values, na.rm = TRUE)
+})
+  pathway_results <- pairwise_termsim(pathway_results)
+  #barplot(pathway_results, showCategory = 20)
+  png(paste0("./PATHWAYS_new/reactome", i, "_", ident_2, "_vs_", ident_1, "_dotplot_REACTOME.png"), width = 10, height = 15, res = 300, units = "in" )
+  p <- dotplot(pathway_results, showCategory = 20)
+  print(p)
+  dev.off()
+  png(paste0("./PATHWAYS_new/reactome", i, "_", ident_2, "_vs_", ident_1, "_emapplot_REACTOME.png"), width = 10, height = 15, res = 300, units = "in" )
+  p <- emapplot(pathway_results, showCategory = 20)
+  print(p)
+  dev.off()
+  #emapplot(pathway_results, showCategory = 20, color = "logFC")  # Use logFC for node colors
+
+}
+}
+
+```
+
+
+
+```{r, fig.height=10}
+DimPlot(sickle_cell, group.by = "Parse_Ann1", label = T) +NoLegend()
+DimPlot(Stroma_ScAnemia, group.by = "Parse_Ann", label = T) + NoLegend()
+
+Stroma_ScAnemia$parse
+
+FeaturePlot(sickle_cell, "Acta2")
+FeaturePlot(sickle_cell, "Acta2")
+c("Acta2", "Myh11", "Cnn1", "Tagln")
+
+FeaturePlot(Stroma_ScAnemia, c("Acta2", "Myh11", "Cnn1", "Tagln"))
+
+```
+
+
+
+
+```{r, fig.height=10, fig.width=15}
+SCMF_markers <- c("Agt", "Pdgfra", "Egfem1", "Htra1", "Tnc", "P2ry14", "Tgfbi", "Ltbp2", "Spon2")
+SCMF_gpt <- c("Acta2", "Myh11", "Cnn1", "Col1a1", "Col3a1", "Pdgfra", "Fap", "Tagln", "Tpm2", "Sparc")
+Pericyte_cell_card <- c("Lamc3", "Trpc6", "Cspg4", "Pdgfrb")
+Myofibroblasts_gpt <- c("Acta2", "Tagln", "Myh11", "Tpm2", "Col1a1", "Col3a1", "Fn1", "Tnc", "Tgfb1", "Pdgfra", "Vcl", "Paxillin", "Des", "Vim", "Postn", "Spp1", "Thbs1")
+Vascular_smo <- c("Map3k7cl","Aoc3", "Ntrk3","Gpc6")
+Pnec <- c("Calca", "Grp", "Ascl1", "Scg5", "Cxc13", "Ngf", "Scg2", "Nov", 
+           "Chgb", "Uchl1", "Pkib", "Ddc", "Snap25", "Pcsk1", "Snca", "Bex2", 
+           "Dnajc12")
+
+
+PMP <- c("Adh1", "Hoxb5", "Slc38a5", "Snai2", "Col13a1", "Ccnb1")
+DimPlot(sickle_cell, group.by = "Parse_Ann1", label = T, repel = T) + NoLegend()
+
+for(i in PMP){
+    if(i %in% rownames(sickle_cell)){
+  p <- FeaturePlot(sickle_cell, i, order = T, raster = F)
+  print(p)
+    }else {message(paste("Gene", i, "is", "missing", sep = " "))
+    }
+}
+
+
+DimPlot(sickle_cell, group.by = "Parse_Ann1", split.by = "orig.ident", cells.highlight = colnames(sickle_cell)[grep("Myo", sickle_cell$Parse_Ann1)], raster = F)
+
+
+
+Marker <- FindMarkers(sickle_cell, group.by = "Parse_Ann1", ident.1 = "Pericytes", only.pos = T, min.pct = 0.25, logfc.threshold = 0.25)
+library(dplyr)
+Marker <- Marker %>% 
+  filter(p_val_adj < 0.5) %>%
+  top_n(n =33, wt = avg_log2FC) #%>% 
+  #filter(pct.1 > 0.700)#%>%
+  #filter(pct.1 - pct.2 > 0.400)
+
+
+
+Marker <- FindMarkers(sickle_cell, ident.1 = 21, only.pos = T, min.pct = 0.25, logfc.threshold = 0.25)
+library(dplyr)
+Marker <- Marker %>% 
+  filter(p_val_adj < 0.5) %>%
+  top_n(n =33, wt = avg_log2FC) #%>% 
+  #filter(pct.1 > 0.700)#%>%
+  #filter(pct.1 - pct.2 > 0.400)
+
+
+FeaturePlot(sickle_cell, "Acta2", order = T, raster = F, split.by = "orig.ident")
+
+
+DimPlot(sickle_cell, label = T, repel = T) + NoLegend()
+
+
+
+write.csv(Sickle_AnnEC, "Sickle_AnnEC.csv")
+write.csv(RNA__AnnEC, "RNA__AnnEC.csv")
+
+```
+
+# FINDING UNIQUES CORRESPONDENCE
+```{r}
+unique_correspondence <- RNA_ScAnemia@meta.data %>%
+  group_by(Annotation_transfer_EC) %>%
+  summarize(Parse_Ann2_correspondences = list(unique(Parse_Ann2)))
+
+
+unique_correspondence <- as.data.frame(unique_correspondence)
+class(unique_correspondence)
+
+```
+
+
+```{r}
+# Create the mapping dataframe from the previous step
+mapping_df <- unique_correspondence %>%
+  tidyr::unnest(Parse_Ann2_correspondences) %>%
+  rename(Annotation_transfer_EC = Annotation_transfer_EC, ParseAnn = Parse_Ann2_correspondences)
+
+```
+
+
+
+
+
+#sEX CHECK
+```{r, fig.height=7, fig.width=6}
+
+library(Seurat)
+library(ggplot2)
+
+mouse_sex_genes <- c(
+  # Y-linked (Male-specific) genes
+  "Ddx3y", "Eif2s3y", "Kdm5d", "Uty", "Zfy1", "Zfy2", "Sry", "Usp9y", 
+  "Rbmy1a1", "Tspy1")
+  
+  mouse_sex_genes <- c(# X-linked genes (higher expression in females)
+  "Xist", "Eif2s3x", "Kdm6a", "Rbm3", "Jarid1c", "Tspyl2", "Bcor", "Tmem29", 
+  "Pir", "Eif1ax")
+  
+  mouse_sex_genes <- c(  # Autosomal genes with sex-biased expression
+  "Foxl2", "Sox9", "Esr1", "Ar", "Dmrt1"
+)
+
+
+DotPlot(sickle_cell, mouse_sex_genes, group.by = "group", scale.min = 0) + coord_flip() + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + ggtitle(" Autosomal genes with sex-biased expression")
+
+
+
+```
+
+```{r}
+
+anchors <- FindTransferAnchors(Par_smallref,
+                               sickle_cell,
+                               reference.assay = "RNA",
+                               query.assay = "RNA"
+                               )
+
+Bis_Elh <- TransferData(anchors,
+             as.list(Par_smallref@meta.data)
+             )
+
+# Loop through metadata columns and add to sickle_cell metadata
+
+list <- names(Bis_Elh)
+
+for(i in seq_along(list)){
+  col_name <- list[i]  # Get metadata column name
+  sickle_cell@meta.data[[col_name]] <- Bis_Elh[[col_name]]$predicted.id
+}
+
+
+```
+
+
+```{r}
+library(Matrix)
+
+# Convert raw counts to a sparse matrix (reduces memory usage)
+Parsall_comb@assays$RNA@layers$counts <- as(Parsall_comb@assays$RNA@layers$counts, "dgCMatrix")
+
+# Save total UMI counts per cell in metadata
+Parsall_comb@meta.data$total_UMIs <- Matrix::colSums(Parsall_comb@assays$RNA@layers$counts)
+
+# Remove the full raw counts matrix
+Parsall_comb@assays$RNA@layers$counts <- NULL
+
+
+anchors <- FindTransferAnchors(Parsall_comb,
+                               sickle_cell,
+                               reference.assay = "RNA",
+                               query.assay = "RNA"
+                               )
+
+Bis_Elh <- TransferData(anchors,
+           Parsall_comb$Last_Call)
+             )
+
+Par_smallref@assays$RNA@layers$counts <- NULL
+
+anchors <- FindTransferAnchors(Par_smallref,
+                               sickle_cell,
+                               reference.assay = "RNA",
+                               query.assay = "RNA"
+                               )
+
+Bis_Elh <- TransferData(anchors,
+           Par_smallref$Last_Call)
+             
+
+
+```
+#NULLLLLLL_NOT WORKEDMAKING A SIMPLE REFERENCE SEURAT
+
+```{r}
+
+library(Seurat)
+
+# Extract normalized data (already precomputed)
+normalized_data <- Par_smallref@assays[["RNA"]]@layers[["data"]]
+
+# Ensure row and column names are properly assigned
+rownames(normalized_data) <- rownames(Par_smallref)
+colnames(normalized_data) <- colnames(Par_smallref)
+
+# Create Seurat object, storing in counts (Seurat expects raw counts)
+reference_seurat <- CreateSeuratObject(counts = normalized_data)
+
+# Manually assign pre-normalized data to the `data` slot
+reference_seurat@assays$RNA@layers$data <- normalized_data
+reference_seurat@assays$RNA@layers$counts <- normalized_data
+
+# Assign metadata (cell labels) back
+reference_seurat@meta.data <- Par_smallref@meta.data
+
+reference_seurat <- FindVariableFeatures(reference_seurat)
+#LETS USE
+anchors <- FindTransferAnchors(reference_seurat,
+                               sickle_cell,
+                               reference.assay = "RNA",
+                               query.assay = "RNA",
+                                features = common_features
+                               )
+
+Bis_Elh <- TransferData(anchors,
+           as.list(reference_seurat@meta.data))
+             )
+class(reference_seurat@assays$RNA)
+Layers(reference_seurat)
+
+
+```
+
+
+```{r}
+common_features <- intersect(rownames(reference_seurat), rownames(sickle_cell))
+length(common_features)  # This should not be zero!
+
+yes <- Seurat::FindTransferAnchors
+
+```
+
+
+```{r}
+Idents(seurat_obj) <- seurat_obj@meta.data$group  # Assign groups
+DEG_genotype <- FindMarkers(seurat_obj, ident.1 = c("VPC1", "VPC3"), ident.2 = c("VPC2", "VPC4"))
+DEG_sex <- FindMarkers(seurat_obj, ident.1 = c("VPC1", "VPC2"), ident.2 = c("VPC3", "VPC4"))
+
+```
+
+
+```{r}
+library(clusterProfiler)
+gsea <- gseGO(geneList = sort(DEG_genotype$logFC, decreasing = TRUE), OrgDb = org.Hs.eg.db, ont = "BP")
+dotplot(gsea)
+
+```
+
+
+
+```{r}
+3️⃣ Compare cluster separation (density-based approach)
+
+r
+Copy
+Edit
+library(fpc)
+db <- cluster.stats(dist(Embeddings(seurat_obj[["umap"]])), clusters = Idents(seurat_obj))
+db$avg.silwidth  # Measures cluster separation
+
+
+🔹 Better Approach: Overlay All Samples in One UMAP
+Instead of four separate UMAPs, you can combine all samples and color them by group:
+
+r
+Copy
+Edit
+seurat_obj$sample <- factor(c(rep("VPC1", n1), rep("VPC2", n2), rep("VPC3", n3), rep("VPC4", n4)))
+DimPlot(seurat_obj, group.by = "sample")
+```
+
+
+
+```{r, fig.width=21, fig.height=8}
+
+DimPlot(RNA_ScAnemia, split.by  = "group")
+
+
+
+```
+
+
+
